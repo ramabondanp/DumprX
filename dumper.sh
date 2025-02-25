@@ -71,8 +71,8 @@ fi
 # Sanitize And Generate Folders
 INPUTDIR="${PROJECT_DIR}"/input		# Firmware Download/Preload Directory
 UTILSDIR="${PROJECT_DIR}"/utils		# Contains Supportive Programs
-OUTDIR="${PROJECT_DIR}"/out			# Contains Final Extracted Files
-TMPDIR="${OUTDIR}"/tmp				# Temporary Working Directory
+OUTDIR=/tmp/out			# Contains Final Extracted Files
+TMPDIR="${OUTDIR}"/tmp			# Temporary Working Directory
 
 rm -rf "${TMPDIR}" 2>/dev/null
 mkdir -p "${OUTDIR}" "${TMPDIR}" 2>/dev/null
@@ -139,7 +139,7 @@ AFHDL="${UTILSDIR}"/downloaders/afh_dl.py
 FSCK_EROFS=${UTILSDIR}/bin/fsck.erofs
 
 # Partition List That Are Currently Supported
-PARTITIONS="system system_ext system_other systemex vendor cust odm oem factory product xrom modem dtbo dtb boot vendor_boot recovery tz oppo_product preload_common opproduct reserve india my_preload my_odm my_stock my_operator my_country my_product my_company my_engineering my_heytap my_custom my_manifest my_carrier my_region my_bigball my_version special_preload system_dlkm vendor_dlkm odm_dlkm init_boot vendor_kernel_boot odmko socko nt_log mi_ext hw_product product_h preas preavs"
+PARTITIONS="system system_ext system_other systemex vendor cust odm oem factory product xrom modem dtbo dtb boot vendor_boot recovery tz oppo_product preload_common opproduct reserve india my_preload my_odm my_stock my_operator my_country my_product my_company my_engineering my_heytap my_custom my_manifest my_carrier my_region my_bigball my_version special_preload system_dlkm vendor_dlkm odm_dlkm init_boot vendor_kernel_boot odmko socko nt_log mi_ext hw_product product_h preas preavs tr_product"
 EXT4PARTITIONS="system vendor cust odm oem factory product xrom systemex oppo_product preload_common hw_product product_h preas preavs"
 OTHERPARTITIONS="tz.mbn:tz tz.img:tz modem.img:modem NON-HLOS:modem boot-verified.img:boot recovery-verified.img:recovery dtbo-verified.img:dtbo"
 
@@ -981,12 +981,37 @@ otaver=$(grep -m1 -oP "(?<=^ro.build.version.ota=).*" -hs {vendor/euclid/product
 [[ -z "${otaver}" ]] && otaver=$(grep -m1 -oP "(?<=^ro.build.fota.version=).*" -hs {system,system/system}/build*.prop | head -1)
 [[ -z "${branch}" ]] && branch=$(echo "${description}" | tr ' ' '-')
 
+# Transsions vars
+platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.prop | head -1 || echo "$platform")
+manufacturer=$(grep -m1 -oP "(?<=^ro.product.system_ext.manufacturer=).*" -hs system_ext/etc/build.prop | head -1 || echo "$manufacturer")
+fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
+brand=$(grep -m1 -oP "(?<=^ro.product.system_ext.brand=).*" -hs system_ext/etc/build.prop | head -1 || echo "$brand")
+codename=$(grep -m1 -oP "(?<=^ro.product.product.device=).*" -hs product/etc/build.prop | head -1 || echo "$codename")
+density=$(grep -m1 -oP "(?<=^ro.sf.lcd_density=).*" -hs {vendor,system,system/system}/build*.prop | head -1 || echo "$density")
+transname=$(grep -m1 -oP "(?<=^ro.product.product.tran.device.name.default=).*" -hs product/etc/build.prop | head -1)
+osver=$(grep -m1 -oP "(?<=^ro.os.version.release=).*" -hs product/etc/build.prop | head -1)
+xosver=$(grep -m1 -oP "(?<=^ro.tranos.version=).*" -hs product/etc/build.prop | head -1)
+sec_patch=$(grep -m1 -oP "(?<=^ro.build.version.security_patch=).*" -hs {system,system/system}/build*.prop | head -1)
+xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs tr_product/etc/build.prop | head -1)
+[[ -z "${xosid}" ]] && xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs product/etc/build.prop | head -1)
+
+for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
+  file="product/overlay/${overlay}/${overlay}.apk"
+  if [ -f "$file" ]; then
+    apktool d "$file"
+    tranchipset=" ($(grep -oP '(?<=<string name="cpu_rate_cores">).*(?=</string>)' -ar ${overlay}/res/values/strings.xml))"
+    rm -rf "${overlay}"
+    break
+  fi
+done
+
 if [[ "$PUSH_TO_GITLAB" = true ]]; then
 	rm -rf .github_token
 	repo=$(printf "${brand}" | tr '[:upper:]' '[:lower:]' && echo -e "/${codename}")
 else
 	rm -rf .gitlab_token
-	repo=$(echo "${brand}"_"${codename}"_dump | tr '[:upper:]' '[:lower:]')
+#	repo=$(printf "${brand}" | tr '[:upper:]' '[:lower:]' && echo -e "/${codename}")
+	repo=$(echo "${brand}/${codename}")
 fi
 
 platform=$(echo "${platform}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
@@ -994,7 +1019,27 @@ top_codename=$(echo "${codename}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print
 manufacturer=$(echo "${manufacturer}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
 [ -f "bootRE/ikconfig" ] && kernel_version=$(cat bootRE/ikconfig | grep "Kernel Configuration" | head -1 | awk '{print $3}')
 # Repo README File
-printf "## %s\n- Manufacturer: %s\n- Platform: %s\n- Codename: %s\n- Brand: %s\n- Flavor: %s\n- Release Version: %s\n- Kernel Version: %s\n- Id: %s\n- Incremental: %s\n- Tags: %s\n- CPU Abilist: %s\n- A/B Device: %s\n- Treble Device: %s\n- Locale: %s\n- Screen Density: %s\n- Fingerprint: %s\n- OTA version: %s\n- Branch: %s\n- Repo: %s\n" "${description}" "${manufacturer}" "${platform}" "${codename}" "${brand}" "${flavor}" "${release}" "${kernel_version}" "${id}" "${incremental}" "${tags}" "${abilist}" "${is_ab}" "${treble_support}" "${locale}" "${density}" "${fingerprint}" "${otaver}" "${branch}" "${repo}" > "${OUTDIR}"/README.md
+cat <<EOF > "${OUTDIR}"/README.md
+## FIRMWARE DUMP
+### ${description}
+EOF
+
+[ ! -z "${transname}" ] && echo "- Transsion Name: ${transname}" >> "${OUTDIR}"/README.md
+[ ! -z "${xosid}" ] && echo "- TranOS Build: ${xosid}" >> "${OUTDIR}"/README.md
+[ ! -z "${xosver}" ] && echo "- TranOS Version: ${xosver}" >> "${OUTDIR}"/README.md
+[ ! -z "${manufacturer}" ] && echo "- Brand: ${manufacturer}" >> "${OUTDIR}"/README.md
+[ ! -z "${top_codename}" ] && echo "- Model: ${top_codename}" >> "${OUTDIR}"/README.md
+[ ! -z "${platform}" ] && echo "- Platform: ${platform}${tranchipset}" >> "${OUTDIR}"/README.md
+[ ! -z "${id}" ] && echo "- Android Build: ${id}" >> "${OUTDIR}"/README.md
+[ ! -z "${release}" ] && echo "- Android Version: ${release}" >> "${OUTDIR}"/README.md
+[ ! -z "${kernel_version}" ] && echo "- Kernel Version: ${kernel_version}" >> "${OUTDIR}"/README.md
+[ ! -z "${sec_patch}" ] && echo "- Security Patch: ${sec_patch}" >> "${OUTDIR}"/README.md
+[ ! -z "${abilist}" ] && echo "- CPU Abilist: ${abilist}" >> "${OUTDIR}"/README.md
+[ ! -z "${is_ab}" ] && echo "- A/B Device: ${is_ab}" >> "${OUTDIR}"/README.md
+[ ! -z "${treble_support}" ] && echo "- Treble Device: ${treble_support}" >> "${OUTDIR}"/README.md
+[ ! -z "${density}" ] && echo "- Screen Density: ${density}" >> "${OUTDIR}"/README.md
+[ ! -z "${fingerprint}" ] && echo "- Fingerprint: ${fingerprint}" >> "${OUTDIR}"/README.md
+
 cat "${OUTDIR}"/README.md
 
 # Generate TWRP Trees
@@ -1014,6 +1059,12 @@ if [[ -f ${twrpimg} ]]; then
 	uvx --from git+https://github.com/twrpdtgen/twrpdtgen@master twrpdtgen $twrpimg -o $twrpdtout
 	if [[ "$?" = 0 ]]; then
 		[[ ! -e "${OUTDIR}"/twrp-device-tree/README.md ]] && curl https://raw.githubusercontent.com/wiki/SebaUbuntu/TWRP-device-tree-generator/4.-Build-TWRP-from-source.md > ${twrpdtout}/README.md
+	else
+		twrpimg="vendor_boot.img"
+		python3 -m twrpdtgen $twrpimg -o $twrpdtout
+		if [[ "$?" = 0 ]]; then
+			[[ ! -e "${OUTDIR}"/twrp-device-tree/README.md ]] && curl https://raw.githubusercontent.com/wiki/SebaUbuntu/TWRP-device-tree-generator/4.-Build-TWRP-from-source.md > ${twrpdtout}/README.md
+		fi
 	fi
 fi
 
@@ -1025,6 +1076,7 @@ chown "$(whoami)" ./* -R
 chmod -R u+rwX ./*		#ensure final permissions
 find "$OUTDIR" -type f -printf '%P\n' | sort | grep -v ".git/" > "$OUTDIR"/all_files.txt
 
+if false; then
 # Generate LineageOS Trees
 if [[ "$treble_support" = true ]]; then
         aospdtout="lineage-device-tree"
@@ -1105,12 +1157,15 @@ printf "Generating all_files.sha1...\n"
 write_sha1sum "$OUTDIR"/all_files.{txt,sha1.tmp}
 ( cat "$OUTDIR"/all_files.sha1.tmp | grep -v all_files.txt ) > "$OUTDIR"/all_files.sha1		# all_files.txt will be regenerated
 rm -rf "$OUTDIR"/all_files.sha1.tmp
+fi
 
 # Regenerate all_files.txt
 printf "Generating all_files.txt...\n"
 find "$OUTDIR" -type f -printf '%P\n' | sort | grep -v ".git/" > "$OUTDIR"/all_files.txt
 
 rm -rf "${TMPDIR}" 2>/dev/null
+
+retry_push() { while ! git push "$@"; do echo "Retrying..."; sleep 2; done; }
 
 commit_and_push(){
 	local DIRS=(
@@ -1123,6 +1178,10 @@ commit_and_push(){
 		"vendor"
 		"system"
 	)
+
+	git add README.md
+	git commit -sm "Add README.md for ${description}"
+	retry_push -f origin "${branch}"
 
 	git lfs install
 	[ -e ".gitattributes" ] || find . -type f -not -path ".git/*" -size +100M -exec git lfs track {} \;
