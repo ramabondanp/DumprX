@@ -1396,13 +1396,19 @@ elif [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
 			CHAT_ID="@DumprXDumps"
 		fi
 		printf "Sending telegram notification...\n"
-		printf "<b>Brand: %s</b>" "${brand}" >| "${OUTDIR}"/tg.html
+		printf "<blockquote><b>FIRMWARE DUMP INFO</b></blockquote>" >| "${OUTDIR}"/tg.html
 		{
-			printf "\n<b>Device: %s</b>" "${codename}"
-			printf "\n<b>Platform: %s</b>" "${platform}"
-			printf "\n<b>Android Version:</b> %s" "${release}"
-			[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel Version:</b> %s" "${kernel_version}"
-			printf "\n<b>Fingerprint:</b> %s" "${fingerprint}"
+			[ ! -z "${transname}" ] && printf "\n<b>Transsion name: %s</b>" "<code>${transname}</code>"
+			[ ! -z "${xosid}" ] && printf "\n<b>TranOS build: %s</b>" "<code>${xosid}</code>"
+			[ ! -z "${xosver}" ] && printf "\n<b>TranOS ver: %s</b>" "<code>${xosver}</code>"
+			printf "\n<b>Brand: %s</b>" "<code>${manufacturer}</code>"
+			printf "\n<b>Model: %s</b>" "<code>${codename}</code>"
+			printf "\n<b>Platform: %s</b>" "<code>${platform}${ts_chipset}</code>"
+			printf "\n<b>Android Build: %s</b>" "<code>${id}</code>"
+			printf "\n<b>Android ver: %s</b>" "<code>${release}</code>"
+			[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel ver: %s</b>" "<code>${kernel_version}</code>"
+			printf "\n<b>Security patch: %s</b>" "<code>${sec_patch}</code>"
+			printf "\n<b>Fingerprint: %s</b>" "<code>${fingerprint}</code>"
 			printf "\n<a href=\"${GITLAB_HOST}/%s/%s/-/tree/%s/\">Gitlab Tree</a>" "${GIT_ORG}" "${repo}" "${branch}"
 		} >> "${OUTDIR}"/tg.html
 		TEXT=$(< "${OUTDIR}"/tg.html)
