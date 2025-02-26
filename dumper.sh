@@ -1055,17 +1055,14 @@ else
 	twrpimg="recovery.img"
 fi
 if [[ -f ${twrpimg} ]]; then
-	mkdir -p $twrpdtout
-	uvx --from git+https://github.com/twrpdtgen/twrpdtgen@master twrpdtgen $twrpimg -o $twrpdtout
-	if [[ "$?" = 0 ]]; then
-		[[ ! -e "${OUTDIR}"/twrp-device-tree/README.md ]] && curl https://raw.githubusercontent.com/wiki/SebaUbuntu/TWRP-device-tree-generator/4.-Build-TWRP-from-source.md > ${twrpdtout}/README.md
-	else
-		twrpimg="vendor_boot.img"
-		python3 -m twrpdtgen $twrpimg -o $twrpdtout
-		if [[ "$?" = 0 ]]; then
-			[[ ! -e "${OUTDIR}"/twrp-device-tree/README.md ]] && curl https://raw.githubusercontent.com/wiki/SebaUbuntu/TWRP-device-tree-generator/4.-Build-TWRP-from-source.md > ${twrpdtout}/README.md
-		fi
-	fi
+    mkdir -p $twrpdtout
+    uvx --from git+https://github.com/twrpdtgen/twrpdtgen@master twrpdtgen $twrpimg -o $twrpdtout
+    if [[ "$?" -eq 0 ]]; then
+        [[ ! -e "${twrpdtout}/README.md" ]] && curl https://raw.githubusercontent.com/wiki/SebaUbuntu/TWRP-device-tree-generator/4.-Build-TWRP-from-source.md > ${twrpdtout}/README.md
+    elif [[ -f "vendor_boot.img" ]]; then
+        uvx --from git+https://github.com/twrpdtgen/twrpdtgen@master twrpdtgen vendor_boot.img -o $twrpdtout
+        [[ "$?" -eq 0 && ! -e "${twrpdtout}/README.md" ]] && curl https://raw.githubusercontent.com/wiki/SebaUbuntu/TWRP-device-tree-generator/4.-Build-TWRP-from-source.md > ${twrpdtout}/README.md
+    fi
 fi
 
 # Remove all .git directories from twrpdtout
