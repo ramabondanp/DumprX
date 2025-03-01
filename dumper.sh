@@ -1015,8 +1015,8 @@ else
 fi
 
 platform=$(echo "${platform}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
-top_codename=$(echo "${codename}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
-manufacturer=$(echo "${manufacturer}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
+#top_codename=$(echo "${codename}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
+#manufacturer=$(echo "${manufacturer}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
 [ -f "bootRE/ikconfig" ] && kernel_version=$(cat bootRE/ikconfig | grep "Kernel Configuration" | head -1 | awk '{print $3}')
 # Repo README File
 cat <<EOF > "${OUTDIR}"/README.md
@@ -1024,20 +1024,20 @@ cat <<EOF > "${OUTDIR}"/README.md
 ### ${description}
 EOF
 
-[ ! -z "${transname}" ] && echo "- Transsion Name: ${transname}" >> "${OUTDIR}"/README.md
-[ ! -z "${xosid}" ] && echo "- TranOS Build: ${xosid}" >> "${OUTDIR}"/README.md
-[ ! -z "${xosver}" ] && echo "- TranOS Version: ${xosver}" >> "${OUTDIR}"/README.md
+[ ! -z "${transname}" ] && echo "- Transsion name: ${transname}" >> "${OUTDIR}"/README.md
+[ ! -z "${xosid}" ] && echo "- TranOS build: ${xosid}" >> "${OUTDIR}"/README.md
+[ ! -z "${xosver}" ] && echo "- TranOS version: ${xosver}" >> "${OUTDIR}"/README.md
 [ ! -z "${manufacturer}" ] && echo "- Brand: ${manufacturer}" >> "${OUTDIR}"/README.md
-[ ! -z "${top_codename}" ] && echo "- Model: ${top_codename}" >> "${OUTDIR}"/README.md
+[ ! -z "${codename}" ] && echo "- Model: ${codename}" >> "${OUTDIR}"/README.md
 [ ! -z "${platform}" ] && echo "- Platform: ${platform}${tranchipset}" >> "${OUTDIR}"/README.md
-[ ! -z "${id}" ] && echo "- Android Build: ${id}" >> "${OUTDIR}"/README.md
-[ ! -z "${release}" ] && echo "- Android Version: ${release}" >> "${OUTDIR}"/README.md
-[ ! -z "${kernel_version}" ] && echo "- Kernel Version: ${kernel_version}" >> "${OUTDIR}"/README.md
-[ ! -z "${sec_patch}" ] && echo "- Security Patch: ${sec_patch}" >> "${OUTDIR}"/README.md
-[ ! -z "${abilist}" ] && echo "- CPU Abilist: ${abilist}" >> "${OUTDIR}"/README.md
-[ ! -z "${is_ab}" ] && echo "- A/B Device: ${is_ab}" >> "${OUTDIR}"/README.md
-[ ! -z "${treble_support}" ] && echo "- Treble Device: ${treble_support}" >> "${OUTDIR}"/README.md
-[ ! -z "${density}" ] && echo "- Screen Density: ${density}" >> "${OUTDIR}"/README.md
+[ ! -z "${id}" ] && echo "- Android build: ${id}" >> "${OUTDIR}"/README.md
+[ ! -z "${release}" ] && echo "- Android version: ${release}" >> "${OUTDIR}"/README.md
+[ ! -z "${kernel_version}" ] && echo "- Kernel version: ${kernel_version}" >> "${OUTDIR}"/README.md
+[ ! -z "${sec_patch}" ] && echo "- Security patch: ${sec_patch}" >> "${OUTDIR}"/README.md
+[ ! -z "${abilist}" ] && echo "- CPU abilist: ${abilist}" >> "${OUTDIR}"/README.md
+[ ! -z "${is_ab}" ] && echo "- A/B device: ${is_ab}" >> "${OUTDIR}"/README.md
+[ ! -z "${treble_support}" ] && echo "- Treble device: ${treble_support}" >> "${OUTDIR}"/README.md
+[ ! -z "${density}" ] && echo "- Screen density: ${density}" >> "${OUTDIR}"/README.md
 [ ! -z "${fingerprint}" ] && echo "- Fingerprint: ${fingerprint}" >> "${OUTDIR}"/README.md
 
 cat "${OUTDIR}"/README.md
@@ -1207,6 +1207,8 @@ commit_and_push(){
 	git push -u origin "${branch}"
 }
 
+
+if true; then
 if [[ -s "${PROJECT_DIR}"/.github_token ]]; then
 	GITHUB_TOKEN=$(< "${PROJECT_DIR}"/.github_token)	# Write Your Github Token In a Text File
 	[[ -z "$(git config --get user.email)" ]] && git config user.email "guptasushrut@gmail.com"
@@ -1401,7 +1403,7 @@ elif [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
 			printf "\n<b>Brand: %s</b>" "<code>${manufacturer}</code>"
 			printf "\n<b>Model: %s</b>" "<code>${codename}</code>"
 			printf "\n<b>Platform: %s</b>" "<code>${platform}${ts_chipset}</code>"
-			printf "\n<b>Android Build: %s</b>" "<code>${id}</code>"
+			printf "\n<b>Android build: %s</b>" "<code>${id}</code>"
 			printf "\n<b>Android ver: %s</b>" "<code>${release}</code>"
 			[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel ver: %s</b>" "<code>${kernel_version}</code>"
 			printf "\n<b>Security patch: %s</b>" "<code>${sec_patch}</code>"
@@ -1413,6 +1415,10 @@ elif [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
 		curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendmessage" --data "text=${TEXT}&chat_id=${CHAT_ID}&parse_mode=HTML&disable_web_page_preview=True" || printf "Telegram Notification Sending Error.\n"
 	fi
 
+else
+	printf "Dumping done locally.\n"
+	exit
+fi
 else
 	printf "Dumping done locally.\n"
 	exit
