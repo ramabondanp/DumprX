@@ -985,7 +985,7 @@ otaver=$(grep -m1 -oP "(?<=^ro.build.version.ota=).*" -hs {vendor/euclid/product
 platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.prop | head -1 || echo "$platform")
 manufacturer=$(grep -m1 -oP "(?<=^ro.product.system_ext.manufacturer=).*" -hs system_ext/etc/build.prop | head -1 || echo "$manufacturer")
 fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
-fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
+fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
 brand=$(grep -m1 -oP "(?<=^ro.product.system_ext.brand=).*" -hs system_ext/etc/build.prop | head -1 || echo "$brand")
 codename=$(grep -m1 -oP "(?<=^ro.product.product.device=).*" -hs product/etc/build.prop | head -1 || echo "$codename")
 density=$(grep -m1 -oP "(?<=^ro.sf.lcd_density=).*" -hs {vendor,system,system/system}/build*.prop | head -1 || echo "$density")
