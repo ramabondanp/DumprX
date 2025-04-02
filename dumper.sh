@@ -995,6 +995,7 @@ xosver=$(grep -m1 -oP "(?<=^ro.tranos.version=).*" -hs product/etc/build.prop | 
 sec_patch=$(grep -m1 -oP "(?<=^ro.build.version.security_patch=).*" -hs {system,system/system}/build*.prop | head -1)
 xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs tr_product/etc/build.prop | head -1)
 [[ -z "${xosid}" ]] && xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs product/etc/build.prop | head -1)
+branch=$(echo "${xosid}" | tr ' ' '-')
 
 for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
   file="product/overlay/${overlay}/${overlay}.apk"
