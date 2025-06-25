@@ -134,12 +134,13 @@ fi
 # Set Names of Downloader Utility Programs
 MEGAMEDIADRIVE_DL="${UTILSDIR}"/downloaders/mega-media-drive_dl.sh
 AFHDL="${UTILSDIR}"/downloaders/afh_dl.py
+RANDOM=$(date +%s)
 
 # EROFS
 FSCK_EROFS=${UTILSDIR}/bin/fsck.erofs
 
 # Partition List That Are Currently Supported
-PARTITIONS="system system_ext system_other systemex vendor cust odm oem factory product xrom modem dtbo dtb boot vendor_boot recovery tz oppo_product preload_common opproduct reserve india my_preload my_odm my_stock my_operator my_country my_product my_company my_engineering my_heytap my_custom my_manifest my_carrier my_region my_bigball my_version special_preload system_dlkm vendor_dlkm odm_dlkm init_boot vendor_kernel_boot odmko socko nt_log mi_ext hw_product product_h preas preavs tr_product"
+PARTITIONS="system system_ext system_other systemex vendor cust odm oem factory product xrom modem dtbo dtb boot vendor_boot recovery tz oppo_product preload_common opproduct reserve india my_preload my_odm my_stock my_operator my_country my_product my_company my_engineering my_heytap my_custom my_manifest my_carrier my_region my_bigball my_version special_preload system_dlkm vendor_dlkm odm_dlkm init_boot vendor_kernel_boot odmko socko nt_log mi_ext hw_product product_h preas preavs tr_product preload version"
 EXT4PARTITIONS="system vendor cust odm oem factory product xrom systemex oppo_product preload_common hw_product product_h preas preavs"
 OTHERPARTITIONS="tz.mbn:tz tz.img:tz modem.img:modem NON-HLOS:modem boot-verified.img:boot recovery-verified.img:recovery dtbo-verified.img:dtbo"
 
@@ -484,8 +485,8 @@ elif ${BIN_7ZZ} l -ba "${FILEPATH}" | grep system | grep chunk | grep -q -v ".*\
 	printf "Chunk Detected.\n"
 	for partition in ${PARTITIONS}; do
 		if [[ -f "${FILEPATH}" ]]; then
-			foundpartitions=$(${BIN_7ZZ} l -ba "${FILEPATH}" | gawk '{print $NF}' | grep "${partition}".img)
-			${BIN_7ZZ} e -y -- "${FILEPATH}" *"${partition}"*chunk* */*"${partition}"*chunk* "${foundpartitions}" dummypartition 2>/dev/null >> "${TMPDIR}"/zip.log
+			foundpartitions=$(${BIN_7ZZ} l -ba "${FILEPATH}" | gawk '{print $NF}' | grep ${partition}.img)
+			${BIN_7ZZ} e -y -- "${FILEPATH}" *${partition}*chunk* */*${partition}*chunk* "${foundpartitions}" dummypartition 2>/dev/null >> "${TMPDIR}"/zip.log
 		else
 			find "${TMPDIR}" -type f -name "*${partition}*chunk*" -exec mv {} . \; 2>/dev/null
 			find "${TMPDIR}" -type f -name "*${partition}*.img" -exec mv {} . \; 2>/dev/null
@@ -495,10 +496,10 @@ elif ${BIN_7ZZ} l -ba "${FILEPATH}" | grep system | grep chunk | grep -q -v ".*\
 		romchunk=$(find . -maxdepth 1 -type f -name "*${partition}*chunk*" | cut -d'/' -f'2-' | sort)
 		if echo "${romchunk}" | grep -q "sparsechunk"; then
 			if [[ ! -f "${partition}".img ]]; then
-				"${SIMG2IMG}" "${romchunk}" "${partition}".img.raw 2>/dev/null
-				mv "${partition}".img.raw "${partition}".img
+				"${SIMG2IMG}" *${partition}*chunk* "${partition}".img.raw 2>/dev/null
+				mv ${partition}.img.raw ${partition}.img
 			fi
-			rm -rf -- *"${partition}"*chunk* 2>/dev/null
+			rm -rf -- *${partition}*chunk* 2>/dev/null
 		fi
 	done
 elif ${BIN_7ZZ} l -ba "${FILEPATH}" | gawk '{print $NF}' | grep -q "system_new.img\|^system.img\|\/system.img\|\/system_image.emmc.img\|^system_image.emmc.img" 2>/dev/null || [[ $(find "${TMPDIR}" -type f -name "system*.img" | wc -l) -ge 1 ]]; then
@@ -622,7 +623,8 @@ elif ${BIN_7ZZ} l -ba "${FILEPATH}" | grep tar.md5 | gawk '{print $NF}' | grep -
 	printf "AP tarmd5 Detected\n"
 	#mv -f "${FILEPATH}" "${TMPDIR}"/
 	[[ -f "${FILEPATH}" ]] && ${BIN_7ZZ} e -y "${FILEPATH}" 2>/dev/null >> "${TMPDIR}"/zip.log
-	printf "Extracting Images...\n"
+	rm "${FILEPATH}"
+    printf "Extracting Images...\n"
 	for i in $(ls *.tar.md5); do
 		tar -xf "${i}" || exit 1
 		rm -fv "${i}" || exit 1
@@ -640,7 +642,7 @@ elif ${BIN_7ZZ} l -ba "${FILEPATH}" | grep tar.md5 | gawk '{print $NF}' | grep -
 		mv -v $samsung_ext4_img_files "${samsung_ext4_img_files%%.ext4}"
 	done
 	if [[ -f super.img ]]; then
-		superimage_extract || exit 1	
+		superimage_extract || exit 1
 	fi
 	if [[ ! -f system.img ]]; then
 		printf "Extract failed\n"
@@ -671,11 +673,12 @@ elif ${BIN_7ZZ} l -ba "${FILEPATH}" | grep -q "UPDATE.APP" 2>/dev/null || [[ $(f
 	printf "Huawei UPDATE.APP Detected\n"
 	[[ -f "${FILEPATH}" ]] && ${BIN_7ZZ} x "${FILEPATH}" UPDATE.APP 2>/dev/null >> "${TMPDIR}"/zip.log
 	find "${TMPDIR}" -type f -name "UPDATE.APP" -exec mv {} . \;
-	python3 "${SPLITUAPP}" -f "UPDATE.APP" -l super preas preavs || (
+	python3 "${SPLITUAPP}" -f "UPDATE.APP" -l || (
 	for partition in ${PARTITIONS}; do
 		python3 "${SPLITUAPP}" -f "UPDATE.APP" -l "${partition/.img/}" || printf "%s not found in UPDATE.APP\n" "${partition}"
 	done )
-	find output/ -type f -name "*.img" -exec mv {} . \;	# Partitions Are Extracted In "output" Folder
+    find output/ -type f -name "*.img" -exec mv {} . \;	# Partitions Are Extracted In "output" Folder
+    "${SIMG2IMG}" super*.img super.img.raw 2>/dev/null && rm super*.img
 	if [[ -f super.img ]]; then
 		printf "Creating super.img.raw ...\n"
 		"${SIMG2IMG}" super.img super_* super.img.raw 2>/dev/null
@@ -811,29 +814,25 @@ if [[ -f "${OUTDIR}"/dtbo.img ]]; then
 	printf "dtbo extracted\n"
 fi
 
-# Show some info
-neofetch || uname -r
-
 # Extract Partitions
 for p in $PARTITIONS; do
 	if ! echo "${p}" | grep -q "boot\|recovery\|dtbo\|vendor_boot\|tz"; then
 		if [[ -e "$p.img" ]]; then
 			mkdir "$p" 2> /dev/null || rm -rf "${p:?}"/*
-			echo "Extracting $p partition..."
-			${BIN_7ZZ} x -snld "$p".img -y -o"$p"/ > /dev/null 2>&1
+			echo "Trying to extract $p partition via fsck.erofs."
+			"${FSCK_EROFS}" --extract="$p" "$p".img
 			if [ $? -eq 0 ]; then
 				rm "$p".img > /dev/null 2>&1
 			else
-				# Handling EROFS Images, which can't be handled by 7z.
-				echo "Extraction Failed my 7z"
 				if [ -f $p.img ] && [ $p != "modem" ]; then
-					echo "Couldn't extract $p partition by 7z. Using fsck.erofs."
+					echo "Extraction via fsck.erofs failed, extracting $p partition via 7zz"
 					rm -rf "${p}"/*
-					"${FSCK_EROFS}" --extract="$p" "$p".img
+					${BIN_7ZZ} x -snld "$p".img -y -o"$p"/ > /dev/null 2>&1
 					if [ $? -eq 0 ]; then
 						rm -fv "$p".img > /dev/null 2>&1
 					else
-						echo "Couldn't extract $p partition by fsck.erofs. Using mount loop"
+						echo "Extraction via 7zz failed!"
+                        echo "Couldn't extract $p partition via 7zz. Using mount loop"
 						sudo mount -o loop -t auto "$p".img "$p"
 						mkdir "${p}_"
 						sudo cp -rf "${p}/"* "${p}_"
@@ -1051,7 +1050,7 @@ if [[ "$is_ab" = true ]]; then
 		printf "Legacy A/B with recovery partition detected...\n"
 		twrpimg="recovery.img"
 	else
-	twrpimg="boot.img"
+	twrpimg="vendor_boot.img"
 	fi
 else
 	twrpimg="recovery.img"
@@ -1098,7 +1097,7 @@ function write_sha1sum(){
 
 	# Temporary file
 	local TMP_FILE=${SRC_FILE}.sha1sum.tmp
-	
+
 	# Get rid of all the Blank lines and Comments
 	( cat ${SRC_FILE} | grep -v '^[[:space:]]*$' | grep -v "# " ) > ${TMP_FILE}
 
@@ -1252,14 +1251,14 @@ if [[ -s "${PROJECT_DIR}"/.github_token ]]; then
 		curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" -d '{ "name": "'"${repo}"'", "description": "'"${description}"'"}' "https://api.github.com/orgs/${GIT_ORG}/repos" >/dev/null 2>&1
 	fi
 	curl -s -X PUT -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.mercy-preview+json" -d '{ "names": ["'"${platform}"'","'"${manufacturer}"'","'"${top_codename}"'","firmware","dump"]}' "https://api.github.com/repos/${GIT_ORG}/${repo}/topics" 	# Update Repository Topics
-	
+
 	# Commit and Push
 	printf "\nPushing to %s via HTTPS...\nBranch:%s\n" "https://github.com/${GIT_ORG}/${repo}.git" "${branch}"
 	sleep 1
 	git remote add origin https://${GITHUB_TOKEN}@github.com/${GIT_ORG}/${repo}.git "${branch}"
 	commit_and_push
 	sleep 1
-	
+
 	# Telegram channel post
 	if [[ -s "${PROJECT_DIR}"/.tg_token ]]; then
 		TG_TOKEN=$(< "${PROJECT_DIR}"/.tg_token)
