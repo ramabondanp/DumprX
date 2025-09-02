@@ -826,6 +826,12 @@ if [[ -f "${OUTDIR}"/vendor_boot.img ]]; then
 	}
 fi
 
+# Extract init_boot.img
+if [[ -f "${OUTDIR}"/init_boot.img ]]; then
+	bash "${UNPACKBOOT}" "${OUTDIR}"/init_boot.img "${OUTDIR}"/init_boot 2>/dev/null
+	printf "Init Boot extracted\n"
+fi
+
 # Extract recovery.img
 if [[ -f "${OUTDIR}"/recovery.img ]]; then
 	bash "${UNPACKBOOT}" "${OUTDIR}"/recovery.img "${OUTDIR}"/recovery 2>/dev/null
@@ -842,7 +848,7 @@ fi
 
 # Extract Partitions
 for p in $PARTITIONS; do
-	if ! echo "${p}" | grep -q "boot\|recovery\|dtbo\|vendor_boot\|tz"; then
+	if ! echo "${p}" | grep -q "boot\|init_boot\|recovery\|dtbo\|vendor_boot\|tz"; then
 		if [[ -e "$p.img" ]]; then
 			mkdir "$p" 2> /dev/null || rm -rf "${p:?}"/*
 			echo "Trying to extract $p partition via fsck.erofs."
@@ -1198,6 +1204,8 @@ commit_and_push(){
 		"system_dlkm"
 		"odm"
 		"odm_dlkm"
+		"init_boot"
+		"vendor_boot"
 		"vendor_dlkm"
 		"vendor"
 		"system"
@@ -1326,7 +1334,7 @@ if [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
 	printf "\n"
 
 	# Push to GitLab
-	while [[ ! $(curl -sL "${GITLAB_HOST}/${GIT_ORG}/${repo}/-/raw/${branch}/all_files.txt" | grep "all_files.txt") ]]
+	while ! git ls-remote --exit-code origin "${branch}" >/dev/null 2>&1 || ! git diff --quiet origin/"${branch}" HEAD -- all_files.txt 2>/dev/null
 	do
 		printf "\nPushing to %s via SSH...\nBranch:%s\n" "${GITLAB_HOST}/${GIT_ORG}/${repo}.git" "${branch}"
 		sleep 1
