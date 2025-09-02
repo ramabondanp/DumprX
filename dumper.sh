@@ -27,8 +27,13 @@ function __bannerTop() {
 
 # Usage/Help
 function _usage() {
-	printf "  \e[1;32;40m \u2730 Usage: \$ %s <Firmware File/Extracted Folder -OR- Supported Website Link> \e[0m\n" "${0}"
-	printf "\t\e[1;32m -> Firmware File: The .zip/.rar/.7z/.tar/.bin/.ozip/.kdz etc. file \e[0m\n\n"
+	printf "  \e[1;32;40m \u2730 Usage: \$ %s [OPTIONS] <Firmware File/Extracted Folder -OR- Supported Website Link> \e[0m\n" "${0}"
+	printf "\t\e[1;32m -> Firmware File: The .zip/.rar/.7z/.tar/.bin/.ozip/.kdz etc. file \e[0m\n"
+	printf "\t\e[1;32m -> OPTIONS: \e[0m\n"
+	printf "\t   -m, --mode <local|gitlab>   Choose output mode (default: local)\n"
+	printf "\t   -g, --gitlab                Shortcut for --mode gitlab\n"
+	printf "\t   -l, --local                 Shortcut for --mode local\n"
+	printf "\t   -h, --help                  Show this help and exit\n\n"
 	sleep .5s
 	printf " \e[1;34m >> Supported Websites: \e[0m\n"
 	printf "\e[36m\t1. Directly Accessible Download Link From Any Website\n"
@@ -47,14 +52,35 @@ function _usage() {
 # Welcome Banner
 printf "\e[32m" && __bannerTop && printf "\e[0m" && sleep 0.3s
 
-# Function Input Check
-if [[ $# = 0 ]]; then
+# Parse CLI options
+MODE="local"
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-m|--mode)
+			MODE="$2"; shift 2 ;;
+		-g|--gitlab)
+			MODE="gitlab"; shift ;;
+		-l|--local)
+			MODE="local"; shift ;;
+		-h|--help)
+			_usage; exit 0 ;;
+		--)
+			shift; break ;;
+		-*)
+			printf "\n  \e[1;31;40m Unknown option: %s \e[0m\n\n" "$1" ; _usage ; exit 1 ;;
+		*)
+			break ;;
+	 esac
+done
+
+# Function Input Check (post-option parsing)
+if [[ $# -lt 1 ]]; then
 	printf "\n  \e[1;31;40m \u2620 Error: No Input Is Given.\e[0m\n\n"
 	sleep .5s && _usage && sleep 1s && exit 1
-elif [[ "${1}" = "" ]]; then
+elif [[ -z "${1}" ]]; then
 	printf "\n  \e[1;31;40m ! BRUH: Enter Firmware Path.\e[0m\n\n"
 	sleep .5s && _usage && sleep 1s && exit 1
-elif [[ "${1}" = " " || -n "$2" ]]; then
+elif [[ ${#@} -gt 1 ]]; then
 	printf "\n  \e[1;31;40m ! BRUH: Enter Only Firmware File Path.\e[0m\n\n"
 	sleep .5s && _usage && sleep 1s && exit 1
 else
@@ -163,7 +189,7 @@ elif echo "${1}" | grep -q "${PROJECT_DIR}/input/" && [[ $(find "${INPUTDIR}" -m
 	fi
 else
 	# Attempt To Download File/Folder From Internet
-	if echo "${1}" | grep -q -e '^\(https\?\|ftp\)://.*$' >/dev/null; then
+    if echo "${1}" | grep -q -e '^\(https\?\|ftp\)://.*$' >/dev/null; then
 		URL=${1}
 		mkdir -p "${INPUTDIR}" 2>/dev/null
 		cd "${INPUTDIR}"/ || exit
@@ -174,7 +200,7 @@ else
 			( python3 "${AFHDL}" -l "${URL}" ) || exit 1
 		elif echo "${URL}" | grep -q "/we.tl/"; then
 			( "${TRANSFER}" "${URL}" ) || exit 1
-		else
+    else
 			if echo "${URL}" | grep -q "1drv.ms"; then URL=${URL/ms/ws}; fi
 			aria2c -x16 -s8 --console-log-level=warn --summary-interval=0 --check-certificate=false "${URL}" || {
 				wget -q --show-progress --progress=bar:force --no-check-certificate "${URL}" || exit 1
@@ -190,7 +216,7 @@ else
 		# For Local File/Folder, Do Not Use Input Directory
 		FILEPATH=$(printf "%s\n" "$1")		# Relative Path To Script
 		FILEPATH=$(realpath "${FILEPATH}")	# Absolute Path
-		if echo "${1}" | grep " "; then
+        if echo "${1}" | grep " "; then
 			if [[ -w "${FILEPATH}" ]]; then
 				detox -r "${FILEPATH}" 2>/dev/null
 				FILEPATH=$(echo "${FILEPATH}" | inline-detox)
@@ -215,7 +241,7 @@ else
 			if ! echo "${ArcPath}" | grep -q " "; then
 				# Assuming There're Only One Archive To Re-Load And Process
 				cd "${PROJECT_DIR}"/ || exit
-				( bash "${0}" "${ArcPath}" ) || exit 1
+				( bash "${0}" --mode "${MODE}" "${ArcPath}" ) || exit 1
 				exit
 			elif echo "${ArcPath}" | grep -q " "; then
 				printf "More Than One Archive File Is Available In %s Folder.\nPlease Use Direct Archive Path Along With This Toolkit\n" "${FILEPATH}" && exit 1
@@ -275,7 +301,7 @@ if [[ $(head -c12 "${FILEPATH}" 2>/dev/null | tr -d '\0') == "OPPOENCRYPT!" ]] |
 	rm -rf "${TMPDIR:?}"/*
 	printf "Re-Loading The Decrypted Content.\n"
 	cd "${PROJECT_DIR}"/ || exit
-	( bash "${0}" "${PROJECT_DIR}/input/" 2>/dev/null || bash "${0}" "${INPUTDIR}"/"${FILE%.*}".zip ) || exit 1
+	( bash "${0}" --mode "${MODE}" "${PROJECT_DIR}/input/" 2>/dev/null || bash "${0}" --mode "${MODE}" "${INPUTDIR}"/"${FILE%.*}".zip ) || exit 1
 	exit
 fi
 # Oneplus .ops Check
@@ -288,7 +314,7 @@ if ${BIN_7ZZ} l -ba "${FILEPATH}" | grep -q ".*.ops" 2>/dev/null; then
 	sleep 1s
 	printf "Reloading the extracted OPS\n"
 	cd "${PROJECT_DIR}"/ || exit
-	( bash "${0}" "${PROJECT_DIR}/input/${foundops}" 2>/dev/null) || exit 1
+	( bash "${0}" --mode "${MODE}" "${PROJECT_DIR}/input/${foundops}" 2>/dev/null) || exit 1
 	exit
 fi
 if [[ "${EXTENSION}" == "ops" ]]; then
@@ -302,7 +328,7 @@ if [[ "${EXTENSION}" == "ops" ]]; then
 	rm -rf "${TMPDIR:?}"/*
 	printf "Re-Loading The Decrypted Content.\n"
 	cd "${PROJECT_DIR}"/ || exit
-	( bash "${0}" "${PROJECT_DIR}/input/" 2>/dev/null || bash "${0}" "${INPUTDIR}"/"${FILE%.*}".zip ) || exit 1
+	( bash "${0}" --mode "${MODE}" "${PROJECT_DIR}/input/" 2>/dev/null || bash "${0}" --mode "${MODE}" "${INPUTDIR}"/"${FILE%.*}".zip ) || exit 1
 	exit
 fi
 # Oppo .ofp Check
@@ -315,7 +341,7 @@ if ${BIN_7ZZ} l -ba "${FILEPATH}" | gawk '{print $NF}' | grep -q ".*.ofp" 2>/dev
 	sleep 1s
 	printf "Reloading the extracted OFP\n"
 	cd "${PROJECT_DIR}"/ || exit
-	( bash "${0}" "${PROJECT_DIR}/input/${foundofp}" 2>/dev/null) || exit 1
+	( bash "${0}" --mode "${MODE}" "${PROJECT_DIR}/input/${foundofp}" 2>/dev/null) || exit 1
 	exit
 fi
 if [[ "${EXTENSION}" == "ofp" ]]; then
@@ -337,7 +363,7 @@ if [[ "${EXTENSION}" == "ofp" ]]; then
 	rm -rf "${TMPDIR:?}"/*
 	printf "Re-Loading The Decrypted Contents.\n"
 	cd "${PROJECT_DIR}"/ || exit
-	( bash "${0}" "${PROJECT_DIR}/input/" ) || exit 1
+	( bash "${0}" --mode "${MODE}" "${PROJECT_DIR}/input/" ) || exit 1
 	exit
 fi
 # Xiaomi .tgz Check
@@ -354,7 +380,7 @@ if [[ "${FILE##*.}" == "tgz" || "${FILE#*.}" == "tar.gz" ]]; then
 	rm -rf "${TMPDIR:?}"/*
 	printf "Re-Loading The Extracted Contents.\n"
 	cd "${PROJECT_DIR}"/ || exit
-	( bash "${0}" "${PROJECT_DIR}/input/" ) || exit 1
+	( bash "${0}" --mode "${MODE}" "${PROJECT_DIR}/input/" ) || exit 1
 	exit
 fi
 # LG KDZ Check
@@ -665,7 +691,7 @@ elif ${BIN_7ZZ} l -ba "${FILEPATH}" | grep ".*.rar\|.*.zip\|.*.7z\|.*.tar$" 2>/d
 		mv "${TMPDIR}"/"${file}" "${INPUTDIR}"/
 		rm -rf "${TMPDIR:?}"/*
 		cd "${PROJECT_DIR}"/ || exit
-		( bash "${0}" "${INPUTDIR}"/"${file}" ) || exit 1
+		( bash "${0}" --mode "${MODE}" "${INPUTDIR}"/"${file}" ) || exit 1
 		exit
 	done
 	rm -rf "${TMPDIR:?}"/"${UNZIP_DIR}"
@@ -1209,7 +1235,7 @@ commit_and_push(){
 }
 
 
-if true; then
+if [[ "${MODE}" == "gitlab" ]]; then
 if [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
 	if [[ -s "${PROJECT_DIR}"/.gitlab_group ]]; then
 		GIT_ORG=$(< "${PROJECT_DIR}"/.gitlab_group)	# Set Your Gitlab Group Name
@@ -1345,8 +1371,8 @@ if [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
 	fi
 
 else
-	printf "Dumping done locally.\n"
-	exit
+	printf "GitLab mode selected but .gitlab_token is missing.\n"
+	exit 1
 fi
 else
 	printf "Dumping done locally.\n"
