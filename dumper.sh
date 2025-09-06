@@ -1013,7 +1013,8 @@ otaver=$(grep -m1 -oP "(?<=^ro.build.version.ota=).*" -hs {vendor/euclid/product
 [[ -z "${branch}" ]] && branch=$(echo "${description}" | tr ' ' '-')
 
 # Transsions vars
-platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.prop | head -1 || echo "$platform")
+platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.prop)
+[ -z "$platform" ] && platform=$(grep -m1 -oP "(?<=^ro.board.platform=).*" -hs vendor/build.prop)
 manufacturer=$(grep -m1 -oP "(?<=^ro.product.system_ext.manufacturer=).*" -hs system_ext/etc/build.prop | head -1 || echo "$manufacturer")
 fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
@@ -1026,7 +1027,7 @@ xosver=$(grep -m1 -oP "(?<=^ro.tranos.version=).*" -hs product/etc/build.prop | 
 sec_patch=$(grep -m1 -oP "(?<=^ro.build.version.security_patch=).*" -hs {system,system/system}/build*.prop | head -1)
 xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs tr_product/etc/build.prop | head -1)
 [[ -z "${xosid}" ]] && xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs product/etc/build.prop | head -1)
-branch=$(echo "${xosid}" | tr ' ' '-')
+[ -n "$xosid" ] && branch=$(echo "$xosid" | tr ' ' '-')
 
 for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
   file="product/overlay/${overlay}/${overlay}.apk"
