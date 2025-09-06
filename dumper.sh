@@ -146,6 +146,7 @@ AML_EXTRACT="${UTILSDIR}"/aml-upgrade-package-extract
 AFPTOOL_EXTRACT="${UTILSDIR}"/bin/afptool
 RK_EXTRACT="${UTILSDIR}"/bin/rkImageMaker
 TRANSFER="${UTILSDIR}"/bin/transfer
+AVBTOOL="${UTILSDIR}"/avbtool.py
 
 if ! command -v 7zz > /dev/null 2>&1; then
 	BIN_7ZZ="${UTILSDIR}"/bin/7zz
@@ -540,6 +541,11 @@ elif ${BIN_7ZZ} l -ba "${FILEPATH}" | gawk '{print $NF}' | grep -q "system_new.i
 	find "${TMPDIR}" -mindepth 2 -type f -name "*.img" -exec mv {} . \;	# move .img in sub-dir to ${TMPDIR}
 	### Keep some files, add script here to retain them
 	find "${TMPDIR}" -type f -iname "*Android_scatter.txt" -exec mv {} "${OUTDIR}"/ \;
+	find "${TMPDIR}" -type f -iname "*Android_scatter.xml" -exec mv {} "${OUTDIR}"/ \;
+	find "${TMPDIR}" -type f -iname "DA_BR.bin" -exec sh -c '
+		mkdir -p "${0}/download_agent"
+		mv "$1" "${0}/download_agent/"
+		' "${OUTDIR}" {} \;
 	find "${TMPDIR}" -type f -iname "*Release_Note.txt" -exec mv {} "${OUTDIR}"/ \;
 	find "${TMPDIR}" -type f ! -name "*img*" -exec rm -rf {} \;	# delete other files
 	find "${TMPDIR}" -maxdepth 3 -type f -name "*.img" -exec mv {} . \; 2>/dev/null
@@ -786,6 +792,7 @@ if [[ -f "${OUTDIR}"/boot.img ]]; then
 	uvx -q extract-dtb "${OUTDIR}"/boot.img -o "${OUTDIR}"/bootimg >/dev/null
 	find "${OUTDIR}"/bootimg -name '*.dtb' -type f | gawk -F'/' '{print $NF}' | while read -r i; do "${DTC}" -q -s -f -I dtb -O dts -o bootdts/"${i/\.dtb/.dts}" bootimg/"${i}"; done 2>/dev/null
 	bash "${UNPACKBOOT}" "${OUTDIR}"/boot.img "${OUTDIR}"/boot 2>/dev/null
+	python3 "${AVBTOOL}" info_image --image "${OUTDIR}"/boot.img > "${OUTDIR}"/boot/avb.txt 2>/dev/null
 	printf "Boot extracted\n"
 	# extract-ikconfig
 	mkdir -p "${OUTDIR}"/bootRE
