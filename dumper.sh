@@ -53,7 +53,7 @@ function _usage() {
 printf "\e[32m" && __bannerTop && printf "\e[0m" && sleep 0.3s
 
 # Parse CLI options
-MODE="local"
+MODE="gitlab"
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		-m|--mode)
@@ -1228,12 +1228,12 @@ commit_and_push(){
 	[ -e ".gitattributes" ] && {
 		git add ".gitattributes"
 		git commit -sm "Setup Git LFS"
-		git push -u origin "${branch}"
+		retry_push -u origin "${branch}"
 	}
 
 	git add $(find -type f -name '*.apk')
 	git commit -sm "Add apps for ${description}"
-	git push -u origin "${branch}"
+	retry_push -u origin "${branch}"
 
 	for i in "${DIRS[@]}"; do
 		[ -d "${i}" ] && git add "${i}"
@@ -1242,12 +1242,12 @@ commit_and_push(){
 		[ -d vendor/"${i}" ] && git add vendor/"${i}"
 
 		git commit -sm "Add ${i} for ${description}"
-		git push -u origin "${branch}"
+		retry_push -u origin "${branch}"
 	done
 
 	git add .
 	git commit -sm "Add extras for ${description}"
-	git push -u origin "${branch}"
+	retry_push -u origin "${branch}"
 }
 
 
