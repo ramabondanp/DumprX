@@ -1,0 +1,11 @@
+# .dumprxenv
+# This file contains sensitive environment variables and should be added to .gitignore.
+
+# GitLab Configuration
+export GITLAB_TOKEN=""
+export GITLAB_INSTANCE="gitlab.com"
+export GITLAB_GROUP="rama-firmware-dumps" # Optional: Your GitLab group name. If empty, your username will be used.
+
+# Telegram Configuration
+export TG_TOKEN=""
+export TG_CHAT="-1001459070028" # Optional: Your Telegram chat ID. If empty, "@DumprXDumps" will be used.

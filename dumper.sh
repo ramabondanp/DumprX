@@ -5,7 +5,7 @@ tput reset 2>/dev/null || clear
 
 # Unset Every Variables That We Are Gonna Use Later
 unset PROJECT_DIR INPUTDIR UTILSDIR OUTDIR TMPDIR FILEPATH FILE EXTENSION UNZIP_DIR ArcPath \
-	GITHUB_TOKEN GIT_ORG TG_TOKEN CHAT_ID
+	GITHUB_TOKEN
 
 # Resize Terminal Window To Atleast 30x90 For Better View
 printf "\033[8;30;90t" || true
@@ -93,6 +93,9 @@ if echo "${PROJECT_DIR}" | grep " "; then
 	printf "\nProject Directory Path Contains Empty Space,\nPlace The Script In A Proper UNIX-Formatted Folder\n\n"
 	sleep 1s && exit 1
 fi
+
+# Source environment variables from .dumprxenv
+source "${PROJECT_DIR}"/.dumprxenv
 
 # Sanitize And Generate Folders
 INPUTDIR="${PROJECT_DIR}"/input		# Firmware Download/Preload Directory
@@ -1046,14 +1049,7 @@ for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
   fi
 done
 
-if [[ "$PUSH_TO_GITLAB" = true ]]; then
-	rm -rf .github_token
-	repo=$(printf "${brand}" | tr '[:upper:]' '[:lower:]' && echo -e "/${codename}")
-else
-	rm -rf .gitlab_token
-#	repo=$(printf "${brand}" | tr '[:upper:]' '[:lower:]' && echo -e "/${codename}")
-	repo=$(echo "${brand}/${codename}")
-fi
+repo=$(printf "${brand}" | tr '[:upper:]' '[:lower:]' && echo -e "/${codename}")
 
 platform=$(echo "${platform}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
 #top_codename=$(echo "${codename}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
@@ -1252,19 +1248,12 @@ commit_and_push(){
 
 
 if [[ "${MODE}" == "gitlab" ]]; then
-if [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
-	if [[ -s "${PROJECT_DIR}"/.gitlab_group ]]; then
-		GIT_ORG=$(< "${PROJECT_DIR}"/.gitlab_group)	# Set Your Gitlab Group Name
-	else
-		GIT_USER="$(git config --get user.name)"
-		GIT_ORG="${GIT_USER}"				# Otherwise, Your Username will be used
-	fi
+if [[ -n "${GITLAB_TOKEN}" ]]; then
+	GIT_ORG="${GITLAB_GROUP}"	# Set Your Gitlab Group Name
 
 	# Gitlab Vars
-	GITLAB_TOKEN=$(< "${PROJECT_DIR}"/.gitlab_token)	# Write Your Gitlab Token In a Text File
-	if [ -f "${PROJECT_DIR}"/.gitlab_instance ]; then
-		GITLAB_INSTANCE=$(< "${PROJECT_DIR}"/.gitlab_instance)
-	else
+	# GITLAB_TOKEN is already sourced from .dumprxenv
+	if [[ -z "${GITLAB_INSTANCE}" ]]; then
 		GITLAB_INSTANCE="gitlab.com"
 	fi
 	GITLAB_HOST="https://${GITLAB_INSTANCE}"
@@ -1358,10 +1347,9 @@ if [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
 	printf "\n"
 
 	# Telegram channel post
-	if [[ -s "${PROJECT_DIR}"/.tg_token ]]; then
-		TG_TOKEN=$(< "${PROJECT_DIR}"/.tg_token)
-		if [[ -s "${PROJECT_DIR}"/.tg_chat ]]; then		# TG Channel ID
-			CHAT_ID=$(< "${PROJECT_DIR}"/.tg_chat)
+	if [[ -n "${TG_TOKEN}" ]]; then
+		if [[ -n "${TG_CHAT}" ]]; then		# TG Channel ID
+			CHAT_ID="${TG_CHAT}"
 		else
 			CHAT_ID="@DumprXDumps"
 		fi
@@ -1387,7 +1375,7 @@ if [[ -s "${PROJECT_DIR}"/.gitlab_token ]]; then
 	fi
 
 else
-	printf "GitLab mode selected but .gitlab_token is missing.\n"
+	printf "GitLab mode selected but gitlab token is missing.\n"
 	exit 1
 fi
 else
