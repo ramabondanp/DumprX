@@ -658,7 +658,6 @@ elif ${BIN_7ZZ} l -ba "${FILEPATH}" | grep tar.md5 | gawk '{print $NF}' | grep -
 	printf "AP tarmd5 Detected\n"
 	#mv -f "${FILEPATH}" "${TMPDIR}"/
 	[[ -f "${FILEPATH}" ]] && ${BIN_7ZZ} e -y "${FILEPATH}" 2>/dev/null >> "${TMPDIR}"/zip.log
-	rm "${FILEPATH}"
     printf "Extracting Images...\n"
 	for i in $(ls *.tar.md5); do
 		tar -xf "${i}" || exit 1
