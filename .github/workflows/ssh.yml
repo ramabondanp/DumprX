@@ -1,0 +1,52 @@
+name: SSH and noVNC
+on:
+  workflow_dispatch:
+    inputs:
+      runs-on:
+        type: choice
+        description: 'The runner pool to run the job on'
+        required: true
+        default: ubuntu-24.04
+        options:
+          - ubuntu-24.04
+          - ubuntu-22.04
+      enable-webtop:
+        type: boolean
+        description: 'Enable Webtop and Cloudflare Tunnel'
+        required: true
+        default: false
+jobs:
+  serve:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup DumprX
+        run: |
+          git clone https://github.com/ramabondanp/DumprX
+          bash setup.sh
+          neofetch && df -h
+          sudo mkdir /mnt/dump /tmp/out
+          sudo chown -R runner /mnt/dump/
+          sudo mount -o bind /mnt/dump /tmp/out
+
+      - name: Install Webtop
+        if: ${{ inputs.enable-webtop }}
+        run: |
+          sudo docker run -d --name=webtop -e PUID=1001 -e PGID=1001 -e TZ=Asia/Jakarta -p 8080:3000 -v /mnt/webtop:/config ghcr.io/linuxserver/webtop:ubuntu-mate
+
+      - name: Install Cloudflare Tunnel
+        if: ${{ inputs.enable-webtop }}
+        run: |
+          wget -O cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+
+      - name: Start Cloudflare Tunnel
+        if: ${{ inputs.enable-webtop }}
+        run: |
+          cloudflared tunnel --url http://localhost:8080 &
+          sleep 5
+          echo "Cloudflare Tunnel started. Check the logs above for the public URL."
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
