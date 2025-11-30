@@ -31,6 +31,7 @@ function _usage() {
 	printf "\t\e[1;32m -> Firmware File: The .zip/.rar/.7z/.tar/.bin/.ozip/.kdz etc. file \e[0m\n"
 	printf "\t\e[1;32m -> OPTIONS: \e[0m\n"
 	printf "\t   -p, --push-only             Push only (Skip extraction)\n"
+	printf "\t   -r, --readme-only           Generate README.md only (Skip extraction)\n"
 	printf "\t   -m, --mode <local|gitlab>   Choose output mode (default: local)\n"
 	printf "\t   -g, --gitlab                Shortcut for --mode gitlab\n"
 	printf "\t   -l, --local                 Shortcut for --mode local\n"
@@ -56,10 +57,13 @@ printf "\e[32m" && __bannerTop && printf "\e[0m" && sleep 0.3s
 # Parse CLI options
 MODE="gitlab"
 PUSH_ONLY=false
+README_ONLY=false
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		-p|--push-only)
 			PUSH_ONLY=true; shift ;;
+		-r|--readme-only)
+			README_ONLY=true; shift ;;
 		-m|--mode)
 			MODE="$2"; shift 2 ;;
 		-g|--gitlab)
@@ -78,7 +82,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Function Input Check (post-option parsing)
-if [[ "${PUSH_ONLY}" == "false" ]]; then
+if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	if [[ $# -lt 1 ]]; then
 		printf "\n  \e[1;31;40m \u2620 Error: No Input Is Given.\e[0m\n\n"
 		sleep .5s && _usage && sleep 1s && exit 1
@@ -109,7 +113,7 @@ UTILSDIR="${PROJECT_DIR}"/utils		# Contains Supportive Programs
 OUTDIR=/tmp/out			# Contains Final Extracted Files
 TMPDIR="${OUTDIR}"/tmp			# Temporary Working Directory
 
-if [[ "${PUSH_ONLY}" == "false" ]]; then
+if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	rm -rf "${TMPDIR}" 2>/dev/null
 	mkdir -p "${OUTDIR}" "${TMPDIR}" 2>/dev/null
 
@@ -1093,6 +1097,11 @@ EOF
 [ ! -z "${fingerprint}" ] && echo "- Fingerprint: ${fingerprint}" >> "${OUTDIR}"/README.md
 
 cat "${OUTDIR}"/README.md
+
+if [[ "${README_ONLY}" == "true" ]]; then
+	printf "\nREADME.md generated. Skipping Tree generation & Pushing.\n"
+	exit 0
+fi
 
 # Generate TWRP Trees
 twrpdtout="twrp-device-tree"
