@@ -1041,14 +1041,14 @@ otaver=$(grep -m1 -oP "(?<=^ro.build.version.ota=).*" -hs {vendor/euclid/product
 [[ -z "${otaver}" ]] && otaver=$(grep -m1 -oP "(?<=^ro.build.fota.version=).*" -hs {system,system/system}/build*.prop | head -1)
 [[ -z "${branch}" ]] && branch=$(echo "${description}" | tr ' ' '-')
 
-# Transsions vars
+# Transsion vars
 platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.prop)
 [ -z "$platform" ] && platform=$(grep -m1 -oP "(?<=^ro.board.platform=).*" -hs vendor/build.prop)
-manufacturer=$(grep -m1 -oP "(?<=^ro.product.system_ext.manufacturer=).*" -hs system_ext/etc/build.prop | head -1 || echo "$manufacturer")
+manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {vendor/odm,odm}/etc/build.prop | tail -1 || echo "$manufacturer")
+codename=$(grep -hoP "(?<=^ro.product.odm.device=).*" {vendor/odm,odm}/etc/build.prop | tail -1 || echo "$codename")
 fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
 brand=$(grep -m1 -oP "(?<=^ro.product.system_ext.brand=).*" -hs system_ext/etc/build.prop | head -1 || echo "$brand")
-codename=$(grep -m1 -oP "(?<=^ro.product.product.device=).*" -hs product/etc/build.prop | head -1 || echo "$codename")
 density=$(grep -m1 -oP "(?<=^ro.sf.lcd_density=).*" -hs {vendor,system,system/system}/build*.prop | head -1 || echo "$density")
 transname=$(grep -m1 -oP "(?<=^ro.product.product.tran.device.name.default=).*" -hs product/etc/build.prop | head -1)
 osver=$(grep -m1 -oP "(?<=^ro.os.version.release=).*" -hs product/etc/build.prop | head -1)
@@ -1068,7 +1068,7 @@ for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
   fi
 done
 
-repo=$(printf "${brand}" | tr '[:upper:]' '[:lower:]' && echo -e "/${codename}")
+repo=$(printf "${manufacturer}" && echo -e "/${codename}")
 
 platform=$(echo "${platform}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
 #top_codename=$(echo "${codename}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
@@ -1097,6 +1097,8 @@ EOF
 [ ! -z "${fingerprint}" ] && echo "- Fingerprint: ${fingerprint}" >> "${OUTDIR}"/README.md
 
 cat "${OUTDIR}"/README.md
+
+echo -e "\nrepo: $repo\n"
 
 if [[ "${README_ONLY}" == "true" ]]; then
 	printf "\nREADME.md generated. Skipping Tree generation & Pushing.\n"
