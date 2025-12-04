@@ -1305,7 +1305,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	curl --request POST \
 	--header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
 	--header "Content-Type: application/json" \
-	--data '{"name": "'"${brand}"'", "path": "'"$(echo ${brand} | tr [:upper:] [:lower:])"'", "visibility": "public", "parent_id": "'"${GRP_ID}"'"}' \
+	--data '{"name": "'"${manufacturer}"'", "path": "'"$(echo ${manufacturer} | tr [:upper:] [:lower:])"'", "visibility": "public", "parent_id": "'"${GRP_ID}"'"}' \
 	"${GITLAB_HOST}/api/v4/groups/"
 	echo ""
 
@@ -1321,7 +1321,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 		done
 		}
 
-	get_gitlab_subgrp_id ${brand} /tmp/subgrp_id.txt
+	get_gitlab_subgrp_id ${manufacturer} /tmp/subgrp_id.txt
 	SUBGRP_ID=$(< /tmp/subgrp_id.txt)
 
 	# Create Repository
