@@ -1044,10 +1044,11 @@ otaver=$(grep -m1 -oP "(?<=^ro.build.version.ota=).*" -hs {vendor/euclid/product
 # Transsion vars
 platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.prop)
 [ -z "$platform" ] && platform=$(grep -m1 -oP "(?<=^ro.board.platform=).*" -hs vendor/build.prop)
-manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {vendor/odm,odm}/etc/build.prop | tail -1 || echo "$manufacturer")
-codename=$(grep -hoP "(?<=^ro.product.odm.device=).*" {vendor/odm,odm}/etc/build.prop | tail -1 || echo "$codename")
+manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop} | tail -1 || echo "$manufacturer")
+codename=$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop} | tail -1 | tr ' ' '-' || echo "${codename// /-}")
 fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
+fingerprint=$(grep -m1 -oP "(?<=^ro.build.fingerprint=).*" -hs my_manifest/build.prop || echo "$fingerprint")
 brand=$(grep -m1 -oP "(?<=^ro.product.system_ext.brand=).*" -hs system_ext/etc/build.prop | head -1 || echo "$brand")
 density=$(grep -m1 -oP "(?<=^ro.sf.lcd_density=).*" -hs {vendor,system,system/system}/build*.prop | head -1 || echo "$density")
 transname=$(grep -m1 -oP "(?<=^ro.product.product.tran.device.name.default=).*" -hs product/etc/build.prop | head -1)
@@ -1062,7 +1063,7 @@ for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
   file="product/overlay/${overlay}/${overlay}.apk"
   if [ -f "$file" ]; then
     apktool d "$file"
-    tranchipset=" ($(grep -oP '(?<=<string name="cpu_rate_cores">).*(?=</string>)' -ar ${overlay}/res/values/strings.xml))"
+    tranchipset="$(grep -oP '(?<=<string name="cpu_rate_cores">).*(?=</string>)' -ar ${overlay}/res/values/strings.xml)"
     rm -rf "${overlay}"
     break
   fi
@@ -1070,33 +1071,57 @@ done
 
 repo=$(printf "${manufacturer}" && echo -e "/${codename}")
 
-platform=$(echo "${platform}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
+#platform=$(echo "${platform}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
 #top_codename=$(echo "${codename}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
 #manufacturer=$(echo "${manufacturer}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
-[ -f "bootRE/ikconfig" ] && kernel_version=$(cat bootRE/ikconfig | grep "Kernel Configuration" | head -1 | awk '{print $3}')
+kernel_version=$(strings boot/kernel | grep -m1 -oP 'Linux version \K[\d.]+-[\w-]+')
+[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-2}
+[ -z "$kernel_version" ] && kernel_version=$(zcat boot/kernel | strings | grep -i Android | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
 # Repo README File
 cat <<EOF > "${OUTDIR}"/README.md
 ## FIRMWARE DUMP
 ### ${description}
 EOF
 
-[ ! -z "${transname}" ] && echo "- Transsion name: ${transname}" >> "${OUTDIR}"/README.md
-[ ! -z "${xosid}" ] && echo "- TranOS build: ${xosid}" >> "${OUTDIR}"/README.md
-[ ! -z "${xosver}" ] && echo "- TranOS version: ${xosver}" >> "${OUTDIR}"/README.md
-[ ! -z "${manufacturer}" ] && echo "- Brand: ${manufacturer}" >> "${OUTDIR}"/README.md
-[ ! -z "${codename}" ] && echo "- Model: ${codename}" >> "${OUTDIR}"/README.md
-[ ! -z "${platform}" ] && echo "- Platform: ${platform}${tranchipset}" >> "${OUTDIR}"/README.md
-[ ! -z "${id}" ] && echo "- Android build: ${id}" >> "${OUTDIR}"/README.md
-[ ! -z "${release}" ] && echo "- Android version: ${release}" >> "${OUTDIR}"/README.md
-[ ! -z "${kernel_version}" ] && echo "- Kernel version: ${kernel_version}" >> "${OUTDIR}"/README.md
-[ ! -z "${sec_patch}" ] && echo "- Security patch: ${sec_patch}" >> "${OUTDIR}"/README.md
-[ ! -z "${abilist}" ] && echo "- CPU abilist: ${abilist}" >> "${OUTDIR}"/README.md
-[ ! -z "${is_ab}" ] && echo "- A/B device: ${is_ab}" >> "${OUTDIR}"/README.md
-[ ! -z "${treble_support}" ] && echo "- Treble device: ${treble_support}" >> "${OUTDIR}"/README.md
-[ ! -z "${density}" ] && echo "- Screen density: ${density}" >> "${OUTDIR}"/README.md
-[ ! -z "${fingerprint}" ] && echo "- Fingerprint: ${fingerprint}" >> "${OUTDIR}"/README.md
+if [ -z "${transname}" ] && [ -f "odm/etc/goldwatermark/configs/TranssionWM.json" ]; then
+    transname="$(grep -oP '(?<=TEXT_BRAND_NAME": ")[^"]*' odm/etc/goldwatermark/configs/TranssionWM.json | head -n1 | xargs)"
+fi
 
-cat "${OUTDIR}"/README.md
+xiaominame=$(grep -rhs -oP "(?<=^ro.product.odm.marketname=).*" {odm,vendor/odm}/etc/ 2>/dev/null | grep -v '^[a-z]*$' | sort -u | paste -sd '|' | sed 's/|/ | /g')
+
+[ ! -n "${xiaominame}" ] && motoname=$(grep -hs "^ro\.product\..*\.model=" */etc/build.prop system/system/build.prop product/etc/motorola/props/*.prop | cut -d= -f2 | tr -d '\r' | awk '{$1=$1};1' | grep -i "moto" | sort -u | paste -sd "|" - | sed 's/|/ | /g')
+
+outfile="${OUTDIR}/README.md"
+
+[ -n "${transname}" ]      && echo "- Transsion name: ${transname}" >> "$outfile"
+[ -n "${xiaominame}" ]      && echo "- Xiaomi name: ${xiaominame}" >> "$outfile"
+[ -n "${motoname}" ]      && echo "- Moto name: ${motoname}" >> "$outfile"
+[ -n "${xosid}" ]          && echo "- TranOS build: ${xosid}" >> "$outfile"
+[ -n "${xosver}" ]         && echo "- TranOS version: ${xosver}" >> "$outfile"
+[ -n "${manufacturer}" ]   && echo "- Brand: ${manufacturer}" >> "$outfile"
+[ -n "${codename}" ]       && echo "- Model: ${codename}" >> "$outfile"
+
+if [ -n "${platform}" ]; then
+    if [[ "${platform}" == *"ums"* ]] && [ -n "${tranchipset}" ]; then
+        echo "- Platform: ${tranchipset}" >> "$outfile"
+    elif [ -n "${tranchipset}" ]; then
+        echo "- Platform: ${platform} (${tranchipset})" >> "$outfile"
+    else
+        echo "- Platform: ${platform}" >> "$outfile"
+    fi
+fi
+
+[ -n "${id}" ]             && echo "- Android build: ${id}" >> "$outfile"
+[ -n "${release}" ]        && echo "- Android version: ${release}" >> "$outfile"
+[ -n "${kernel_version}" ] && echo "- Kernel version: ${kernel_version}" >> "$outfile"
+[ -n "${sec_patch}" ]      && echo "- Security patch: ${sec_patch}" >> "$outfile"
+[ -n "${abilist}" ]        && echo "- CPU abilist: ${abilist}" >> "$outfile"
+[ -n "${is_ab}" ]          && echo "- A/B device: ${is_ab}" >> "$outfile"
+[ -n "${treble_support}" ] && echo "- Treble device: ${treble_support}" >> "$outfile"
+[ -n "${density}" ]        && echo "- Screen density: ${density}" >> "$outfile"
+[ -n "${fingerprint}" ]    && echo "- Fingerprint: ${fingerprint}" >> "$outfile"
+
+cat "$outfile"
 
 echo -e "\nrepo: $repo\n"
 
@@ -1383,6 +1408,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 		printf "<blockquote><b>FIRMWARE DUMP INFO</b></blockquote>" >| "${OUTDIR}"/tg.html
 		{
 			[ ! -z "${transname}" ] && printf "\n<b>Transsion name: %s</b>" "<code>${transname}</code>"
+			[ ! -z "${xiaominame}" ] && printf "\n<b>Xiaomi name: %s</b>" "<code>${xiaominame}</code>"
 			[ ! -z "${xosid}" ] && printf "\n<b>TranOS build: %s</b>" "<code>${xosid}</code>"
 			[ ! -z "${xosver}" ] && printf "\n<b>TranOS ver: %s</b>" "<code>${xosver}</code>"
 			printf "\n<b>Brand: %s</b>" "<code>${manufacturer}</code>"
