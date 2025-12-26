@@ -1041,11 +1041,12 @@ otaver=$(grep -m1 -oP "(?<=^ro.build.version.ota=).*" -hs {vendor/euclid/product
 [[ -z "${otaver}" ]] && otaver=$(grep -m1 -oP "(?<=^ro.build.fota.version=).*" -hs {system,system/system}/build*.prop | head -1)
 [[ -z "${branch}" ]] && branch=$(echo "${description}" | tr ' ' '-')
 
-# Transsion vars
+# Vars
 platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.prop)
 [ -z "$platform" ] && platform=$(grep -m1 -oP "(?<=^ro.board.platform=).*" -hs vendor/build.prop)
-manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop} | tail -1 || echo "$manufacturer")
-codename=$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop} | tail -1 | tr ' ' '-' || echo "${codename// /-}")
+manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} | tail -1 || echo "$manufacturer")
+codename=$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} | tail -1 | tr ' ' '-' || echo "${codename// /-}")
+[ -z "$codename" ] && codename=$(grep -hoP "(?<=^ro.product.odm.model=).*" {my_manifest/build.prop} | tail -1 | tr ' ' '-' || echo "${codename// /-}")
 fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.build.fingerprint=).*" -hs my_manifest/build.prop || echo "$fingerprint")
@@ -1071,12 +1072,10 @@ done
 
 repo=$(printf "${manufacturer}" && echo -e "/${codename}")
 
-#platform=$(echo "${platform}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
-#top_codename=$(echo "${codename}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
-#manufacturer=$(echo "${manufacturer}" | tr '[:upper:]' '[:lower:]' | tr -dc '[:print:]' | tr '_' '-' | cut -c 1-35)
 kernel_version=$(strings boot/kernel | grep -m1 -oP 'Linux version \K[\d.]+-[\w-]+')
 [ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-2}
 [ -z "$kernel_version" ] && kernel_version=$(zcat boot/kernel | strings | grep -i Android | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
+
 # Repo README File
 cat <<EOF > "${OUTDIR}"/README.md
 ## FIRMWARE DUMP
@@ -1091,11 +1090,14 @@ xiaominame=$(grep -rhs -oP "(?<=^ro.product.odm.marketname=).*" {odm,vendor/odm}
 
 [ ! -n "${xiaominame}" ] && motoname=$(grep -hs "^ro\.product\..*\.model=" */etc/build.prop system/system/build.prop product/etc/motorola/props/*.prop | cut -d= -f2 | tr -d '\r' | awk '{$1=$1};1' | grep -i "moto" | sort -u | paste -sd "|" - | sed 's/|/ | /g')
 
+opname=$(grep -hoP "(?<=^ro.vendor.oplus.market.name=).*" my_manifest/build.prop)
+
 outfile="${OUTDIR}/README.md"
 
 [ -n "${transname}" ]      && echo "- Transsion name: ${transname}" >> "$outfile"
 [ -n "${xiaominame}" ]      && echo "- Xiaomi name: ${xiaominame}" >> "$outfile"
 [ -n "${motoname}" ]      && echo "- Moto name: ${motoname}" >> "$outfile"
+[ -n "${opname}" ]      && echo "- OP name: ${opname}" >> "$outfile"
 [ -n "${xosid}" ]          && echo "- TranOS build: ${xosid}" >> "$outfile"
 [ -n "${xosver}" ]         && echo "- TranOS version: ${xosver}" >> "$outfile"
 [ -n "${manufacturer}" ]   && echo "- Brand: ${manufacturer}" >> "$outfile"
@@ -1409,6 +1411,8 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 		{
 			[ ! -z "${transname}" ] && printf "\n<b>Transsion name: %s</b>" "<code>${transname}</code>"
 			[ ! -z "${xiaominame}" ] && printf "\n<b>Xiaomi name: %s</b>" "<code>${xiaominame}</code>"
+			[ ! -z "${motoname}" ] && printf "\n<b>Moto name: %s</b>" "<code>${motoname}</code>"
+			[ ! -z "${opname}" ] && printf "\n<b>OP name: %s</b>" "<code>${opname}</code>"
 			[ ! -z "${xosid}" ] && printf "\n<b>TranOS build: %s</b>" "<code>${xosid}</code>"
 			[ ! -z "${xosver}" ] && printf "\n<b>TranOS ver: %s</b>" "<code>${xosver}</code>"
 			printf "\n<b>Brand: %s</b>" "<code>${manufacturer}</code>"
