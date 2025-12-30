@@ -1380,7 +1380,9 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	git remote add origin git@${GITLAB_INSTANCE}:${GIT_ORG}/${repo}.git
 
 	# Ensure that the target repo is public
-	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url ''"${GITLAB_HOST}"'/api/v4/projects/'"${PROJECT_ID}"'' --data "visibility=public"
+	REPO_DESC="${codename}"
+	[[ -n "${transname}" ]] && REPO_DESC="${transname}"
+	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url ''"${GITLAB_HOST}"'/api/v4/projects/'"${PROJECT_ID}"'' --data "visibility=public" --data-urlencode "description=${REPO_DESC}"
 	printf "\n"
 
 	# Push to GitLab
