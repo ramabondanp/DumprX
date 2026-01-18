@@ -181,7 +181,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	FSCK_EROFS=${UTILSDIR}/bin/fsck.erofs
 
 	# Partition List That Are Currently Supported
-	PARTITIONS="system system_ext system_other systemex vendor cust odm oem factory product xrom modem dtbo dtb boot vendor_boot recovery tz oppo_product preload_common opproduct reserve india my_preload my_odm my_stock my_operator my_country my_product my_company my_engineering my_heytap my_custom my_manifest my_carrier my_region my_bigball my_version special_preload system_dlkm vendor_dlkm odm_dlkm init_boot vendor_kernel_boot odmko socko nt_log mi_ext hw_product product_h preas preavs tr_product preload version"
+	PARTITIONS="system system_ext system_other systemex vendor cust odm oem factory product xrom modem dtbo dtb boot vendor_boot recovery tz oppo_product preload_common opproduct reserve india my_preload my_odm my_stock my_operator my_country my_product my_company my_engineering my_heytap my_custom my_manifest my_carrier my_region my_bigball my_version special_preload system_dlkm vendor_dlkm odm_dlkm init_boot vendor_kernel_boot odmko socko nt_log mi_ext hw_product product_h preas preavs tr_product tr_region preload version"
 	EXT4PARTITIONS="system vendor cust odm oem factory product xrom systemex oppo_product preload_common hw_product product_h preas preavs"
 	OTHERPARTITIONS="tz.mbn:tz tz.img:tz modem.img:modem NON-HLOS:modem boot-verified.img:boot recovery-verified.img:recovery dtbo-verified.img:dtbo"
 
@@ -503,7 +503,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 					if [[ -f "$partition.raw.img" ]]; then
 						mv "$partition.raw.img" "$partition.img"
 					else
-						rawprogramsfile=$(grep -rlw $partition rawprogram*.xml)
+						rawprogramsfile=rawprogram_unsparse0.xml
 						"${PACKSPARSEIMG}" -t $partition -x $rawprogramsfile > ${TMPDIR}/extract.log
 						mv "$partition.raw" "$partition.img"
 					fi
@@ -868,7 +868,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 
 	# Extract Partitions
 	for p in $PARTITIONS; do
-		if ! echo "${p}" | grep -q "boot\|init_boot\|recovery\|dtbo\|vendor_boot\|tz"; then
+		if ! echo "${p}" | grep -q "boot\|init_boot\|recovery\|dtbo\|vendor_boot\|tz\|vbmeta"; then
 			if [[ -e "$p.img" ]]; then
 				mkdir "$p" 2> /dev/null || rm -rf "${p:?}"/*
 				echo "Trying to extract $p partition via fsck.erofs."
@@ -909,7 +909,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 
 	# Remove Unnecessary Image Leftover From OUTDIR
 	for q in *.img; do
-		if ! echo "${q}" | grep -q "boot\|recovery\|dtbo\|tz"; then
+		if ! echo "${q}" | grep -q "boot\|recovery\|dtbo\|tz\|vbmeta"; then
 			rm -f "${q}" 2>/dev/null
 		fi
 	done
@@ -1047,17 +1047,19 @@ platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.
 manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} | tail -1 || echo "$manufacturer")
 codename=$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} | tail -1 | tr ' ' '-' || echo "${codename// /-}")
 [ -z "$codename" ] && codename=$(grep -hoP "(?<=^ro.product.odm.model=).*" {my_manifest/build.prop} | tail -1 | tr ' ' '-' || echo "${codename// /-}")
-fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.build.fingerprint=).*" -hs my_manifest/build.prop || echo "$fingerprint")
+fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
+[ -z "$fingerprint" ] && fingerprint=$(grep -m1 -oP "(?<=^ro.tr_region.build.fingerprint=).*" -hs tr_region/etc/build.prop || echo "$fingerprint")
 brand=$(grep -m1 -oP "(?<=^ro.product.system_ext.brand=).*" -hs system_ext/etc/build.prop | head -1 || echo "$brand")
 density=$(grep -m1 -oP "(?<=^ro.sf.lcd_density=).*" -hs {vendor,system,system/system}/build*.prop | head -1 || echo "$density")
 transname=$(grep -m1 -oP "(?<=^ro.product.product.tran.device.name.default=).*" -hs product/etc/build.prop | head -1)
 osver=$(grep -m1 -oP "(?<=^ro.os.version.release=).*" -hs product/etc/build.prop | head -1)
 xosver=$(grep -m1 -oP "(?<=^ro.tranos.version=).*" -hs product/etc/build.prop | head -1)
+xosver=$(grep -m1 -oP "(?<=^ro.tranos.version=).*" -hs tr_product/etc/build.prop | head -1)
 sec_patch=$(grep -m1 -oP "(?<=^ro.build.version.security_patch=).*" -hs {system,system/system}/build*.prop | head -1)
-xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs tr_product/etc/build.prop | head -1)
-[[ -z "${xosid}" ]] && xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs product/etc/build.prop | head -1)
+xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs tr_region/etc/build.prop | head -1)
+[[ -z "${xosid}" ]] && xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs tr_product/etc/build.prop | head -1)
 [ -n "$xosid" ] && branch=$(echo "$xosid" | tr ' ' '-')
 
 for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
@@ -1069,6 +1071,7 @@ for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
     break
   fi
 done
+[ -z "${tranchipset}" ] && tranchipset=$(cat tr_product/etc/asset/transettings/cpu_info)
 
 repo=$(printf "${manufacturer}" && echo -e "/${codename}")
 
@@ -1084,6 +1087,10 @@ EOF
 
 if [ -z "${transname}" ] && [ -f "odm/etc/goldwatermark/configs/TranssionWM.json" ]; then
     transname="$(grep -oP '(?<=TEXT_BRAND_NAME": ")[^"]*' odm/etc/goldwatermark/configs/TranssionWM.json | head -n1 | xargs)"
+fi
+
+if [ -z "${transname}" ] && [ -f "odm/etc/asset/camera/goldwatermark/configs/TranssionWM.json" ]; then
+    transname="${manufacturer} $(grep -oP '(?<=TEXT_BRAND_NAME": ")[^"]*' odm/etc/asset/camera/goldwatermark/configs/TranssionWM.json | head -n1 | xargs)"
 fi
 
 xiaominame=$(grep -rhs -oP "(?<=^ro.product.odm.marketname=).*" {odm,vendor/odm}/etc/ 2>/dev/null | grep -v '^[a-z]*$' | sort -u | paste -sd '|' | sed 's/|/ | /g')
