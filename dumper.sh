@@ -1128,7 +1128,7 @@ platform=$(grep -m1 -oP "(?<=^ro.vendor.mediatek.platform=).*" -hs vendor/build.
 [ -z "$platform" ] && platform=$(grep -m1 -oP "(?<=^ro.board.platform=).*" -hs vendor/build.prop)
 manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} | tail -1 || echo "$manufacturer")
 codename=$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} | tail -1 | tr ' ' '-' || echo "${codename// /-}")
-[ -z "$codename" ] && codename=$(grep -hoP "(?<=^ro.product.odm.model=).*" {my_manifest/build.prop} | tail -1 | tr ' ' '-' || echo "${codename// /-}")
+codename=$(grep -hoP "(?<=^ro.product.odm.model=).*" my_manifest/build.prop | tail -1 | tr ' ' '-' || echo "${codename// /-}")
 fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.build.fingerprint=).*" -hs my_manifest/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
@@ -1157,10 +1157,13 @@ for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
 done
 [ -z "${tranchipset}" ] && tranchipset=$(cat tr_product/etc/asset/transettings/cpu_info)
 
+CPU_MODEL=$(grep "ro.product.oplus.cpuinfo=" my_product/build.prop | head -n 1 | cut -d'=' -f2)
+opchipset=$(grep "model_name=\"$CPU_MODEL\"" my_stock/etc/extension/config_processor_com.android.settings.xml | grep -Po '(?<=name_en=")[^"]*')
+
 repo=$(printf "${manufacturer}" && echo -e "/${codename}")
 
 kernel_version=$(strings boot/kernel | grep -m1 -oP 'Linux version \K[\d.]+-[\w-]+')
-[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-2}
+[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-1}
 [ -z "$kernel_version" ] && kernel_version=$(zcat boot/kernel | strings | grep -i Android | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
 
 # Repo README File
@@ -1199,6 +1202,8 @@ if [ -n "${platform}" ]; then
         echo "- Platform: ${tranchipset}" >> "$outfile"
     elif [ -n "${tranchipset}" ]; then
         echo "- Platform: ${platform} (${tranchipset})" >> "$outfile"
+    elif [ -n "${opchipset}" ]; then
+        echo "- Platform: ${platform} (${opchipset})" >> "$outfile"
     else
         echo "- Platform: ${platform}" >> "$outfile"
     fi
