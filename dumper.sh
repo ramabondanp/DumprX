@@ -181,7 +181,21 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	FSCK_EROFS=${UTILSDIR}/bin/fsck.erofs
 
 	# Partition List That Are Currently Supported
-	PARTITIONS="system system_ext system_other systemex vendor cust odm oem factory product xrom modem dtbo dtb boot vendor_boot recovery tz oppo_product preload_common opproduct reserve india my_preload my_odm my_stock my_operator my_country my_product my_company my_engineering my_heytap my_custom my_manifest my_carrier my_region my_bigball my_version special_preload system_dlkm vendor_dlkm odm_dlkm init_boot vendor_kernel_boot odmko socko nt_log mi_ext hw_product product_h preas preavs tr_product tr_region preload version"
+	PARTITIONS="
+	system system_ext systemex system_other system_dlkm
+	vendor vendor_dlkm vendor_boot vendor_kernel_boot
+	product product_h
+	odm odm_dlkm odmko
+	boot init_boot recovery dtbo dtb modem tz
+	cust oem factory xrom hw_product mi_ext
+	oppo_product opproduct preload preload_common special_preload
+	my_preload my_odm my_stock my_operator my_country my_product my_company
+	my_engineering my_heytap my_custom my_manifest my_carrier my_region
+	my_bigball my_version
+	tr_product tr_region tr_carrier tr_mi tr_preload tr_company
+	tr_overlayfs tr_theme tr_manifest tr_misc
+	preas preavs reserve version nt_log socko india
+	"
 	EXT4PARTITIONS="system vendor cust odm oem factory product xrom systemex oppo_product preload_common hw_product product_h preas preavs"
 	OTHERPARTITIONS="tz.mbn:tz tz.img:tz modem.img:modem NON-HLOS:modem boot-verified.img:boot recovery-verified.img:recovery dtbo-verified.img:dtbo"
 
@@ -795,6 +809,11 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 		[[ ! -s "${OUTDIR}"/"${partition}".img && -f "${OUTDIR}"/"${partition}".img ]] && rm "${OUTDIR}"/"${partition}".img
 	done
 
+	# Preserve super_*.img chunks in OUTDIR before extraction cleanup
+	if compgen -G "super_*.img" > /dev/null; then
+		mv super_*.img "${OUTDIR}"/
+	fi
+
 	cd "${OUTDIR}"/ || exit
 	rm -rf "${TMPDIR:?}"/*
 
@@ -906,6 +925,69 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 			fi
 		fi
 	done
+
+	# Identify partitions extracted from super_*.img chunks
+	if compgen -G "super_*.img" > /dev/null; then
+		BASE_TARGET="."
+		echo "Extracting and identifying partitions..."
+
+		for i in {2..17}; do
+			FILE="super_${i}.img"
+			[[ -f "${FILE}" ]] || continue
+			"${FSCK_EROFS}" "${FILE}" &>/dev/null || continue
+
+			TEMP_DIR="temp_chunk_${i}"
+			rm -rf "${TEMP_DIR}"
+			mkdir -p "${TEMP_DIR}"
+
+			if ! "${FSCK_EROFS}" --extract="${TEMP_DIR}" "${FILE}" &>/dev/null; then
+				rm -rf "${TEMP_DIR}"
+				continue
+			fi
+
+			PART_NAME=""
+
+			# vendor_dlkm detection
+			if find "${TEMP_DIR}" -type d -path "*/lib/modules/*android*" -print -quit | grep -q .; then
+				PART_NAME="system_dlkm"
+
+			# tr_manifest detection
+			elif [ "$(find "${TEMP_DIR}" -mindepth 1 -maxdepth 1 | wc -l)" -eq 1 ] \
+				&& [ -f "${TEMP_DIR}/build.prop" ]; then
+				PART_NAME="tr_manifest"
+			else
+				PROP_FILE=""
+
+				if [ -f "${TEMP_DIR}/build.prop" ]; then
+					PROP_FILE="${TEMP_DIR}/build.prop"
+				elif [ -f "${TEMP_DIR}/etc/build.prop" ]; then
+					PROP_FILE="${TEMP_DIR}/etc/build.prop"
+				elif [ -f "${TEMP_DIR}/system/build.prop" ]; then
+					PROP_FILE="${TEMP_DIR}/system/build.prop"
+				fi
+
+				if [ -n "${PROP_FILE}" ]; then
+					PART_NAME=$(grep -oP 'ro\.product\.\K[^.]+' "${PROP_FILE}" | head -n 1)
+				fi
+			fi
+
+			# Fallback if still empty
+			[ -n "${PART_NAME}" ] || PART_NAME="unknown"
+
+			# Handle duplicates
+			FINAL_PATH="${BASE_TARGET}/${PART_NAME}"
+			COUNTER=2
+			while [ -d "${FINAL_PATH}" ]; do
+				FINAL_PATH="${BASE_TARGET}/${PART_NAME}_${COUNTER}"
+				((COUNTER++))
+			done
+
+			echo "Chunk ${i} identified as [${PART_NAME}] -> ${FINAL_PATH}"
+			mv "${TEMP_DIR}" "${FINAL_PATH}"
+		done
+
+		echo "Done. Check '${BASE_TARGET}'."
+	fi
 
 	# Remove Unnecessary Image Leftover From OUTDIR
 	for q in *.img; do
@@ -1050,16 +1132,18 @@ codename=$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.p
 fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/etc/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.build.fingerprint=).*" -hs my_manifest/build.prop || echo "$fingerprint")
 fingerprint=$(grep -m1 -oP "(?<=^ro.tr_product.build.fingerprint=).*" -hs tr_product/etc/build.prop || echo "$fingerprint")
+fingerprint=$(grep -m1 -oP "(?<=^ro.build.fingerprint=).*" -hs tr_manifest/build.prop || echo "$fingerprint")
 [ -z "$fingerprint" ] && fingerprint=$(grep -m1 -oP "(?<=^ro.tr_region.build.fingerprint=).*" -hs tr_region/etc/build.prop || echo "$fingerprint")
 brand=$(grep -m1 -oP "(?<=^ro.product.system_ext.brand=).*" -hs system_ext/etc/build.prop | head -1 || echo "$brand")
 density=$(grep -m1 -oP "(?<=^ro.sf.lcd_density=).*" -hs {vendor,system,system/system}/build*.prop | head -1 || echo "$density")
 transname=$(grep -m1 -oP "(?<=^ro.product.product.tran.device.name.default=).*" -hs product/etc/build.prop | head -1)
 osver=$(grep -m1 -oP "(?<=^ro.os.version.release=).*" -hs product/etc/build.prop | head -1)
 xosver=$(grep -m1 -oP "(?<=^ro.tranos.version=).*" -hs product/etc/build.prop | head -1)
-xosver=$(grep -m1 -oP "(?<=^ro.tranos.version=).*" -hs tr_product/etc/build.prop | head -1)
+[ -z "$xosver" ] && xosver=$(grep -m1 -oP "(?<=^ro.tranos.version=).*" -hs tr_product/etc/build.prop | head -1)
 sec_patch=$(grep -m1 -oP "(?<=^ro.build.version.security_patch=).*" -hs {system,system/system}/build*.prop | head -1)
 xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs tr_region/etc/build.prop | head -1)
 [[ -z "${xosid}" ]] && xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs tr_product/etc/build.prop | head -1)
+[[ -z "${xosid}" ]] && xosid=$(grep -m1 -oP "(?<=^ro.build.display.id=).*" -hs product/etc/build.prop | head -1)
 [ -n "$xosid" ] && branch=$(echo "$xosid" | tr ' ' '-')
 
 for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
@@ -1273,6 +1357,8 @@ commit_and_push(){
 		"vendor_dlkm"
 		"vendor"
 		"system"
+		"tr_product"
+		"tr_region"
 	)
 
 	git add README.md
