@@ -1472,24 +1472,21 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 		exit 1
 	fi
 	mfr_lower=$(echo "${manufacturer}" | tr '[:upper:]' '[:lower:]')
-	curl --request POST \
+	curl -s --request POST \
 	--header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
 	--header "Content-Type: application/json" \
 	--data '{"name": "'"${manufacturer}"'", "path": "'"${mfr_lower}"'", "visibility": "public", "parent_id": "'"${GRP_ID}"'"}' \
-	"${GITLAB_HOST}/api/v4/groups/"
-	echo ""
+	"${GITLAB_HOST}/api/v4/groups/" > /dev/null
 
-	# Subgroup ID
-	# Look up subgroup ID by name using jq — no temp files, no race conditions
-	get_gitlab_id_by_path() {
-		# Usage: get_gitlab_id_by_path <api_url> <path_to_match>
-		local api_url="$1" match_path="$2"
-		match_path=$(echo "${match_path}" | tr '[:upper:]' '[:lower:]')
+	# Look up ID by name using jq — no temp files, no race conditions
+	get_gitlab_id_by_name() {
+		# Usage: get_gitlab_id_by_name <api_url> <name_to_match>
+		local api_url="$1" match_name="$2"
 		curl -s --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${api_url}" \
-			| jq -r --arg p "${match_path}" '.[] | select(.path == $p) | .id'
+			| jq -r --arg n "${match_name}" '.[] | select(.name == $n) | .id'
 	}
 
-	SUBGRP_ID=$(get_gitlab_id_by_path "${GITLAB_HOST}/api/v4/groups/${GIT_ORG}/subgroups" "${manufacturer}")
+	SUBGRP_ID=$(get_gitlab_id_by_name "${GITLAB_HOST}/api/v4/groups/${GIT_ORG}/subgroups" "${manufacturer}")
 	if [[ -z "${SUBGRP_ID}" ]]; then
 		printf "Error: Could not find subgroup for manufacturer '%s'\n" "${manufacturer}"
 		exit 1
@@ -1499,10 +1496,10 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	curl -s \
 	--header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
 	-X POST \
-	"${GITLAB_HOST}/api/v4/projects?name=${codename}&namespace_id=${SUBGRP_ID}&visibility=public"
+	"${GITLAB_HOST}/api/v4/projects?name=${codename}&namespace_id=${SUBGRP_ID}&visibility=public" > /dev/null
 
 	# Get Project/Repo ID — reuse the same jq-based lookup
-	PROJECT_ID=$(get_gitlab_id_by_path "${GITLAB_HOST}/api/v4/groups/${SUBGRP_ID}/projects" "${codename}")
+	PROJECT_ID=$(get_gitlab_id_by_name "${GITLAB_HOST}/api/v4/groups/${SUBGRP_ID}/projects" "${codename}")
 	if [[ -z "${PROJECT_ID}" ]]; then
 		printf "Error: Could not find project '%s' in subgroup %s\n" "${codename}" "${SUBGRP_ID}"
 		exit 1
