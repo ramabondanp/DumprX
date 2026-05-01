@@ -248,7 +248,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	vendor vendor_dlkm vendor_boot vendor_kernel_boot
 	product product_h
 	odm odm_dlkm odmko
-	boot init_boot recovery dtbo dtb modem tz
+	boot init_boot recovery dtbo dtb modem tz vbmeta
 	cust oem factory xrom hw_product mi_ext
 	oppo_product opproduct preload preload_common special_preload
 	my_preload my_odm my_stock my_operator my_country my_product my_company
@@ -259,7 +259,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	preas preavs reserve version nt_log socko india
 	"
 	EXT4PARTITIONS="system vendor cust odm oem factory product xrom systemex oppo_product preload_common hw_product product_h preas preavs"
-	OTHERPARTITIONS="tz.mbn:tz tz.img:tz modem.img:modem NON-HLOS:modem boot-verified.img:boot recovery-verified.img:recovery dtbo-verified.img:dtbo"
+	OTHERPARTITIONS="tz.mbn:tz tz.img:tz modem.img:modem NON-HLOS:modem boot-verified.img:boot recovery-verified.img:recovery dtbo-verified.img:dtbo vbmeta-verified.img:vbmeta"
 
 	# NOTE: $(pwd) is ${PROJECT_DIR}
 	if [[ "${1}" == *"${PROJECT_DIR}/input"* ]] && [[ $(find "${INPUTDIR}" -maxdepth 1 -type f -size +10M -print | wc -l) -gt 1 ]]; then
