@@ -68,7 +68,7 @@ version=$(od -A n -D -j $header_addr -N 1 $bootimg | sed 's/ //g')
 if [ $version -eq 2 ]; then
     dtb_size=$(od -A n -D -j 1648 -N 4 $bootimg | sed 's/ //g')
     dtb_addr=0x$(od -A n -X -j 1652 -N 4 $bootimg | sed 's/ //g' | sed 's/^0*//g')
-elif [ $version -eq 3 ]; then
+elif [ $version -eq 3 ] || [ $version -eq 4 ]; then
     page_size=4096
     board=
     kernel_size=0
@@ -264,7 +264,7 @@ if lzop -t ../ramdisk.packed 2>/dev/null; then
     lzop -d -c ../ramdisk.packed | cpio -i -d -m --no-absolute-filenames 2>/dev/null
     unpack_complete
 fi
-if lz4 -d ../ramdisk.packed 2>/dev/null | cpio -i -d -m --no-absolute-filenames 2>/dev/null; then
+if lz4 -dc ../ramdisk.packed 2>/dev/null | cpio -i -d -m --no-absolute-filenames 2>/dev/null; then
     pout "ramdisk is lz4 format."
     format=lz4
 else
