@@ -1380,14 +1380,15 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	retry_push() { while ! git push "$@"; do echo "Retrying..."; sleep 2; done; }
 
 	push_lfs_objects() {
-		git lfs ls-files --all -l | awk '{print $1}' | while read -r oid; do
+		git lfs ls-files --all -l | awk '{print $1}' | xargs -n 1 -P 8 bash -c '
+			oid="$1"
 			echo "Pushing LFS object: $oid"
 			while ! git lfs push --object-id origin "$oid"; do
 				echo "Retrying LFS object $oid..."
 				sleep 5
-				done
+			done
 			echo "✓ $oid done"
-		done
+		' _
 	}
 
 	commit_and_push(){
