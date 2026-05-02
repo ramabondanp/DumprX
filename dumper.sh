@@ -142,16 +142,20 @@ reset_inputdir() {
 # Each argument is "property.key:file_glob [file_glob ...]"
 # Returns the first non-empty match and stops searching.
 prop_get() {
-	local entry key files result
+	local entry key paths dir result
 	for entry in "$@"; do
 		key="${entry%%:*}"
-		files="${entry#*:}"
-		# Use eval to expand brace/glob patterns in file paths
-		result=$(eval "grep -m1 -oP '(?<=^${key}=).*' -hs ${files} 2>/dev/null" | head -1)
-		if [[ -n "${result}" ]]; then
-			printf '%s' "${result}"
-			return 0
-		fi
+		paths="${entry#*:}"
+		for dir in $(eval echo ${paths} 2>/dev/null); do
+			if [[ -d "${dir}" ]]; then
+				# Use find to locate build*.prop in the directory or its subdirectories (like etc/)
+				result=$(find "${dir}" -maxdepth 2 -type f -name "build*.prop" 2>/dev/null | xargs -r grep -m1 -oP "(?<=^${key}=).*" -hs 2>/dev/null | head -1)
+				if [[ -n "${result}" ]]; then
+					printf '%s' "${result}"
+					return 0
+				fi
+			fi
+		done
 	done
 	return 1
 }
@@ -1087,106 +1091,106 @@ fi
 sort -u < "${WORK_TMPDIR}"/board-info.txt > "${OUTDIR}"/board-info.txt
 
 # set variables
-[[ $(find "$(pwd)"/system "$(pwd)"/system/system "$(pwd)"/vendor "$(pwd)"/*product -maxdepth 1 -type f -name "build*.prop" 2>/dev/null | sort -u | gawk '{print $NF}') ]] || { printf "No system/vendor/product build*.prop found, pushing cancelled.\n" && exit 1; }
+[[ $(find "$(pwd)"/system "$(pwd)"/system/system "$(pwd)"/vendor "$(pwd)"/*product -maxdepth 2 -type f -name "build*.prop" 2>/dev/null | sort -u | gawk '{print $NF}') ]] || { printf "No system/vendor/product build*.prop found, pushing cancelled.\n" && exit 1; }
 
 flavor=$(prop_get \
-	"ro.build.flavor:{system,system/system,vendor}/build*.prop" \
-	"ro.vendor.build.flavor:vendor/build*.prop" \
-	"ro.system.build.flavor:{system,system/system}/build*.prop" \
-	"ro.build.type:{system,system/system}/build*.prop" \
+	"ro.build.flavor:{system,system/system,vendor}" \
+	"ro.vendor.build.flavor:vendor" \
+	"ro.system.build.flavor:{system,system/system}" \
+	"ro.build.type:{system,system/system}" \
 )
 release=$(prop_get \
-	"ro.build.version.release:{system,system/system,vendor}/build*.prop" \
-	"ro.vendor.build.version.release:vendor/build*.prop" \
-	"ro.system.build.version.release:{system,system/system}/build*.prop" \
+	"ro.build.version.release:{system,system/system,vendor}" \
+	"ro.vendor.build.version.release:vendor" \
+	"ro.system.build.version.release:{system,system/system}" \
 )
 id=$(prop_get \
-	"ro.build.id:{system,system/system,vendor}/build*.prop" \
-	"ro.vendor.build.id:vendor/build*.prop" \
-	"ro.system.build.id:{system,system/system}/build*.prop" \
+	"ro.build.id:{system,system/system,vendor}" \
+	"ro.vendor.build.id:vendor" \
+	"ro.system.build.id:{system,system/system}" \
 )
 tags=$(prop_get \
-	"ro.build.tags:{system,system/system,vendor}/build*.prop" \
-	"ro.vendor.build.tags:vendor/build*.prop" \
-	"ro.system.build.tags:{system,system/system}/build*.prop" \
+	"ro.build.tags:{system,system/system,vendor}" \
+	"ro.vendor.build.tags:vendor" \
+	"ro.system.build.tags:{system,system/system}" \
 )
 platform=$(prop_get \
-	"ro.board.platform:{system,system/system,vendor}/build*.prop" \
-	"ro.vendor.board.platform:vendor/build*.prop" \
-	"ro.system.board.platform:{system,system/system}/build*.prop" \
+	"ro.board.platform:{system,system/system,vendor}" \
+	"ro.vendor.board.platform:vendor" \
+	"ro.system.board.platform:{system,system/system}" \
 )
 manufacturer=$(prop_get \
-	"ro.product.manufacturer:{system,system/system,vendor}/build*.prop" \
-	"ro.product.brand.sub:system/system/euclid/my_product/build*.prop" \
-	"ro.vendor.product.manufacturer:vendor/build*.prop" \
-	"ro.product.vendor.manufacturer:vendor/build*.prop" \
-	"ro.system.product.manufacturer:{system,system/system}/build*.prop" \
-	"ro.product.system.manufacturer:{system,system/system}/build*.prop" \
-	"ro.product.odm.manufacturer:vendor/odm/etc/build*.prop" \
-	"ro.product.manufacturer:{oppo_product,my_product,product}/build*.prop" \
-	"ro.product.manufacturer:vendor/euclid/*/build.prop" \
-	"ro.system.product.manufacturer:vendor/euclid/*/build.prop" \
-	"ro.product.product.manufacturer:vendor/euclid/product/build*.prop" \
-	"ro.product.vendor.manufacturer:vendor/build*.prop" \
-	"ro.product.system.manufacturer:{system,system/system}/build*.prop" \
+	"ro.product.manufacturer:{system,system/system,vendor}" \
+	"ro.product.brand.sub:system/system/euclid/my_product" \
+	"ro.vendor.product.manufacturer:vendor" \
+	"ro.product.vendor.manufacturer:vendor" \
+	"ro.system.product.manufacturer:{system,system/system}" \
+	"ro.product.system.manufacturer:{system,system/system}" \
+	"ro.product.odm.manufacturer:vendor/odm" \
+	"ro.product.manufacturer:{oppo_product,my_product,product}" \
+	"ro.product.manufacturer:vendor/euclid/*" \
+	"ro.system.product.manufacturer:vendor/euclid/*" \
+	"ro.product.product.manufacturer:vendor/euclid/product" \
+	"ro.product.vendor.manufacturer:vendor" \
+	"ro.product.system.manufacturer:{system,system/system}" \
 )
 fingerprint=$(prop_get \
-	"ro.build.fingerprint:{system,system/system}/build*.prop" \
-	"ro.vendor.build.fingerprint:vendor/build*.prop" \
-	"ro.system.build.fingerprint:{system,system/system}/build*.prop" \
-	"ro.product.build.fingerprint:product/build*.prop" \
-	"ro.build.fingerprint:{oppo_product,my_product}/build*.prop" \
-	"ro.system.build.fingerprint:my_product/build.prop" \
-	"ro.vendor.build.fingerprint:my_product/build.prop" \
-	"ro.bootimage.build.fingerprint:vendor/build.prop" \
+	"ro.build.fingerprint:{system,system/system}" \
+	"ro.vendor.build.fingerprint:vendor" \
+	"ro.system.build.fingerprint:{system,system/system}" \
+	"ro.product.build.fingerprint:product" \
+	"ro.build.fingerprint:{oppo_product,my_product}" \
+	"ro.system.build.fingerprint:my_product" \
+	"ro.vendor.build.fingerprint:my_product" \
+	"ro.bootimage.build.fingerprint:vendor" \
 )
 brand=$(prop_get \
-	"ro.product.brand:{system,system/system,vendor}/build*.prop" \
-	"ro.product.brand.sub:system/system/euclid/my_product/build*.prop" \
-	"ro.product.vendor.brand:vendor/build*.prop" \
-	"ro.vendor.product.brand:vendor/build*.prop" \
-	"ro.product.system.brand:{system,system/system}/build*.prop" \
+	"ro.product.brand:{system,system/system,vendor}" \
+	"ro.product.brand.sub:system/system/euclid/my_product" \
+	"ro.product.vendor.brand:vendor" \
+	"ro.vendor.product.brand:vendor" \
+	"ro.product.system.brand:{system,system/system}" \
 )
 # OPPO brand override: prefer euclid value if brand is empty or "OPPO"
-[[ -z "${brand}" || "${brand}" == "OPPO" ]] && brand=$(prop_get "ro.product.system.brand:vendor/euclid/*/build.prop")
+[[ -z "${brand}" || "${brand}" == "OPPO" ]] && brand=$(prop_get "ro.product.system.brand:vendor/euclid/*")
 [[ -z "${brand}" ]] && brand=$(prop_get \
-	"ro.product.product.brand:vendor/euclid/product/build*.prop" \
-	"ro.product.odm.brand:vendor/odm/etc/build*.prop" \
-	"ro.product.brand:{oppo_product,my_product}/build*.prop" \
-	"ro.product.brand:vendor/euclid/*/build.prop" \
+	"ro.product.product.brand:vendor/euclid/product" \
+	"ro.product.odm.brand:vendor/odm" \
+	"ro.product.brand:{oppo_product,my_product}" \
+	"ro.product.brand:vendor/euclid/*" \
 )
 [[ -z "${brand}" ]] && brand=$(echo "$fingerprint" | cut -d'/' -f1)
 codename=$(prop_get \
-	"ro.product.device:{vendor,system,system/system}/build*.prop" \
-	"ro.vendor.product.device.oem:vendor/euclid/odm/build.prop" \
-	"ro.product.vendor.device:vendor/build*.prop" \
-	"ro.vendor.product.device:vendor/build*.prop" \
-	"ro.product.system.device:{system,system/system}/build*.prop" \
-	"ro.product.system.device:vendor/euclid/*/build.prop" \
-	"ro.product.product.device:vendor/euclid/*/build.prop" \
-	"ro.product.product.model:vendor/euclid/*/build.prop" \
-	"ro.product.device:{oppo_product,my_product}/build*.prop" \
-	"ro.product.product.device:oppo_product/build*.prop" \
-	"ro.product.system.device:my_product/build*.prop" \
-	"ro.product.vendor.device:my_product/build*.prop" \
+	"ro.product.device:{vendor,system,system/system}" \
+	"ro.vendor.product.device.oem:vendor/euclid/odm" \
+	"ro.product.vendor.device:vendor" \
+	"ro.vendor.product.device:vendor" \
+	"ro.product.system.device:{system,system/system}" \
+	"ro.product.system.device:vendor/euclid/*" \
+	"ro.product.product.device:vendor/euclid/*" \
+	"ro.product.product.model:vendor/euclid/*" \
+	"ro.product.device:{oppo_product,my_product}" \
+	"ro.product.product.device:oppo_product" \
+	"ro.product.system.device:my_product" \
+	"ro.product.vendor.device:my_product" \
 )
 [[ -z "${codename}" ]] && codename=$(echo "$fingerprint" | cut -d'/' -f3 | cut -d':' -f1)
 [[ -z "${codename}" ]] && codename=$(grep -m1 -oP "(?<=^ro.build.fota.version=).*" -hs {system,system/system}/build*.prop | cut -d'-' -f1 | head -1)
-[[ -z "${codename}" ]] && codename=$(prop_get "ro.build.product:{vendor,system,system/system}/build*.prop")
+[[ -z "${codename}" ]] && codename=$(prop_get "ro.build.product:{vendor,system,system/system}")
 description=$(prop_get \
-	"ro.build.description:{system,system/system,vendor}/build*.prop" \
-	"ro.vendor.build.description:vendor/build*.prop" \
-	"ro.system.build.description:{system,system/system}/build*.prop" \
-	"ro.product.build.description:product/build.prop" \
-	"ro.product.build.description:product/build*.prop" \
+	"ro.build.description:{system,system/system,vendor}" \
+	"ro.vendor.build.description:vendor" \
+	"ro.system.build.description:{system,system/system}" \
+	"ro.product.build.description:product" \
+	"ro.product.build.description:product" \
 )
 incremental=$(prop_get \
-	"ro.build.version.incremental:{system,system/system,vendor}/build*.prop" \
-	"ro.vendor.build.version.incremental:vendor/build*.prop" \
-	"ro.system.build.version.incremental:{system,system/system}/build*.prop" \
-	"ro.build.version.incremental:my_product/build*.prop" \
-	"ro.system.build.version.incremental:my_product/build*.prop" \
-	"ro.vendor.build.version.incremental:my_product/build*.prop" \
+	"ro.build.version.incremental:{system,system/system,vendor}" \
+	"ro.vendor.build.version.incremental:vendor" \
+	"ro.system.build.version.incremental:{system,system/system}" \
+	"ro.build.version.incremental:my_product" \
+	"ro.system.build.version.incremental:my_product" \
+	"ro.vendor.build.version.incremental:my_product" \
 )
 # For Realme devices with empty incremental & fingerprint,
 [[ -z "${incremental}" && "${brand}" =~ "realme" ]] && incremental=$(grep -m1 -oP "(?<=^ro.build.version.ota=).*" -hs {vendor/euclid/product,oppo_product}/build.prop | rev | cut -d'_' -f'1-2' | rev)
@@ -1194,50 +1198,50 @@ incremental=$(prop_get \
 [[ -z "${description}" && -n "${incremental}" ]] && description="${flavor} ${release} ${id} ${incremental} ${tags}"
 [[ -z "${description}" && -z "${incremental}" ]] && description="${codename}"
 abilist=$(prop_get \
-	"ro.product.cpu.abilist:{system,system/system}/build*.prop" \
-	"ro.vendor.product.cpu.abilist:vendor/build*.prop" \
+	"ro.product.cpu.abilist:{system,system/system}" \
+	"ro.vendor.product.cpu.abilist:vendor" \
 )
-locale=$(prop_get "ro.product.locale:{system,system/system}/build*.prop")
+locale=$(prop_get "ro.product.locale:{system,system/system}")
 [[ -z "${locale}" ]] && locale=undefined
-density=$(prop_get "ro.sf.lcd_density:{system,system/system}/build*.prop")
+density=$(prop_get "ro.sf.lcd_density:{system,system/system}")
 [[ -z "${density}" ]] && density=undefined
-is_ab=$(prop_get "ro.build.ab_update:{system,system/system,vendor}/build*.prop")
+is_ab=$(prop_get "ro.build.ab_update:{system,system/system,vendor}")
 [[ -z "${is_ab}" ]] && is_ab="false"
-treble_support=$(prop_get "ro.treble.enabled:{system,system/system}/build*.prop")
+treble_support=$(prop_get "ro.treble.enabled:{system,system/system}")
 [[ -z "${treble_support}" ]] && treble_support="false"
 otaver=$(prop_get \
-	"ro.build.version.ota:{vendor/euclid/product,oppo_product,system,system/system}/build*.prop" \
+	"ro.build.version.ota:{vendor/euclid/product,oppo_product,system,system/system}" \
 )
 [[ -n "${otaver}" && -z "${fingerprint}" ]] && branch="${otaver// /-}"
-[[ -z "${otaver}" ]] && otaver=$(prop_get "ro.build.fota.version:{system,system/system}/build*.prop")
+[[ -z "${otaver}" ]] && otaver=$(prop_get "ro.build.fota.version:{system,system/system}")
 [[ -z "${branch}" ]] && branch="${description// /-}"
 
 # Vendor-specific overrides — these refine values from the initial pass above
 prop_override platform \
-	"ro.vendor.mediatek.platform:vendor/build.prop" \
-	"ro.board.platform:vendor/build.prop"
+	"ro.vendor.mediatek.platform:vendor" \
+	"ro.board.platform:vendor"
 manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} 2>/dev/null | tail -1 || echo "$manufacturer")
 codename=$(grep -hoP "(?<=^ro.product.odm.model=).*" my_manifest/build.prop 2>/dev/null | tail -1 | tr ' ' '-' || true)
 codename=${codename:-$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} 2>/dev/null | tail -1 | tr ' ' '-')}
 prop_override fingerprint \
-	"ro.product.build.fingerprint:product/etc/build.prop" \
-	"ro.build.fingerprint:my_manifest/build.prop" \
-	"ro.tr_product.build.fingerprint:tr_product/etc/build.prop" \
-	"ro.build.fingerprint:tr_manifest/build.prop"
-[[ -z "$fingerprint" ]] && prop_override fingerprint "ro.tr_region.build.fingerprint:tr_region/etc/build.prop"
-prop_override brand "ro.product.system_ext.brand:system_ext/etc/build.prop"
-prop_override density "ro.sf.lcd_density:{vendor,system,system/system}/build*.prop"
-transname=$(prop_get "ro.product.product.tran.device.name.default:product/etc/build.prop")
-osver=$(prop_get "ro.os.version.release:product/etc/build.prop")
+	"ro.build.fingerprint:my_manifest" \
+	"ro.build.fingerprint:tr_manifest" \
+	"ro.tr_product.build.fingerprint:tr_product" \
+	"ro.product.build.fingerprint:product"
+[[ -z "$fingerprint" ]] && prop_override fingerprint "ro.tr_region.build.fingerprint:tr_region"
+prop_override brand "ro.product.system_ext.brand:system_ext"
+prop_override density "ro.sf.lcd_density:{vendor,system,system/system}"
+transname=$(prop_get "ro.product.product.tran.device.name.default:product")
+osver=$(prop_get "ro.os.version.release:product")
 xosver=$(prop_get \
-	"ro.tranos.version:product/etc/build.prop" \
-	"ro.tranos.version:tr_product/etc/build.prop" \
+	"ro.tranos.version:product" \
+	"ro.tranos.version:tr_product" \
 )
-sec_patch=$(prop_get "ro.build.version.security_patch:{system,system/system}/build*.prop")
+sec_patch=$(prop_get "ro.build.version.security_patch:{system,system/system}")
 xosid=$(prop_get \
-	"ro.build.display.id:tr_region/etc/build.prop" \
-	"ro.build.display.id:tr_product/etc/build.prop" \
-	"ro.build.display.id:product/etc/build.prop" \
+	"ro.build.display.id:tr_region" \
+	"ro.build.display.id:tr_product" \
+	"ro.build.display.id:product" \
 )
 [[ -n "$xosid" ]] && branch="${xosid// /-}"
 
@@ -1252,7 +1256,7 @@ for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
 done
 [ -z "${tranchipset}" ] && tranchipset=$(cat tr_product/etc/asset/transettings/cpu_info)
 
-CPU_MODEL=$(grep "ro.product.oplus.cpuinfo=" my_product/build.prop | head -n 1 | cut -d'=' -f2)
+CPU_MODEL=$(grep "ro.product.oplus.cpuinfo=" my_product/etc/build.prop | head -n 1 | cut -d'=' -f2)
 opchipset=$(grep "model_name=\"$CPU_MODEL\"" my_stock/etc/extension/config_processor_com.android.settings.xml | grep -Po '(?<=name_en=")[^"]*')
 
 repo=$(printf "${manufacturer}" && echo -e "/${codename}")
