@@ -1230,7 +1230,7 @@ prop_override fingerprint \
 	"ro.product.build.fingerprint:product"
 [[ -z "$fingerprint" ]] && prop_override fingerprint "ro.tr_region.build.fingerprint:tr_region"
 prop_override brand "ro.product.system_ext.brand:system_ext"
-prop_override density "ro.sf.lcd_density:{vendor,system,system/system}"
+prop_override density "ro.sf.lcd_density:{vendor,system,system/system,odm}"
 transname=$(prop_get "ro.product.product.tran.device.name.default:product")
 osver=$(prop_get "ro.os.version.release:product")
 xosver=$(prop_get \
@@ -1239,6 +1239,7 @@ xosver=$(prop_get \
 )
 sec_patch=$(prop_get "ro.build.version.security_patch:{system,system/system}")
 xosid=$(prop_get \
+	"ro.build.display.id:tr_manifest" \
 	"ro.build.display.id:tr_region" \
 	"ro.build.display.id:tr_product" \
 	"ro.build.display.id:product" \
@@ -1311,7 +1312,7 @@ outfile="${OUTDIR}/README.md"
 
 if [ -n "${platform}" ]; then
     if [[ "${platform}" == *"ums"* ]] && [ -n "${tranchipset}" ]; then
-        echo "- Platform: ${tranchipset}" >> "$outfile"
+        echo "- Platform: ${platform} (${tranchipset})" >> "$outfile"
     elif [ -n "${tranchipset}" ]; then
         echo "- Platform: ${platform} (${tranchipset})" >> "$outfile"
     elif [ -n "${opchipset}" ]; then
