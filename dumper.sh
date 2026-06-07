@@ -968,18 +968,27 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 						else
 							echo "Extraction via 7zz failed!"
 							echo "Couldn't extract $p partition via 7zz. Using mount loop"
-							sudo mount -o loop -t auto "$p".img "$p"
-							mkdir "${p}_"
-							sudo cp -rf "${p}/"* "${p}_"
-							sudo umount "${p}"
-							sudo cp -rf "${p}_/"* "${p}"
-							sudo rm -rf "${p}_"
-							sudo chown -R "$(whoami)" "${p}"/*
-							chmod -R u+rwX "${p}"/*
-							if [ $? -eq 0 ]; then
+							local mount_success=false
+							if sudo mount -o loop -t auto "$p".img "$p" 2>/dev/null; then
+								if mkdir "${p}_" 2>/dev/null; then
+									if sudo cp -a "${p}/." "${p}_/"; then
+										mount_success=true
+									fi
+								fi
+								sudo umount "${p}" 2>/dev/null
+								if [ "$mount_success" = "true" ]; then
+									sudo cp -a "${p}_/." "${p}/" 2>/dev/null
+									sudo rm -rf "${p}_" 2>/dev/null
+									sudo chown -R "$(whoami)" "${p}"/* 2>/dev/null
+									chmod -R u+rwX "${p}"/* 2>/dev/null
+								else
+									sudo rm -rf "${p}_" 2>/dev/null
+								fi
+							fi
+							if [ "$mount_success" = "true" ]; then
 								rm -fv "$p".img > /dev/null 2>&1
 							else
-								echo "Couldn't extract $p partition. It might use an unsupported filesystem."
+								echo "Couldn't extract $p partition. It might use an unsupported filesystem or mounting failed."
 								echo "For EROFS: make sure you're using Linux 5.4+ kernel."
 								echo "For F2FS: make sure you're using Linux 5.15+ kernel."
 							fi
@@ -1382,14 +1391,33 @@ rm -rf "${WORK_TMPDIR}" 2>/dev/null
 if [[ "${MODE}" == "gitlab" ]]; then
 if [[ -n "${GITLAB_TOKEN}" ]]; then
 
-	retry_push() { while ! git push "$@"; do echo "Retrying..."; sleep 2; done; }
+	retry_push() {
+		local attempts=0
+		local max_attempts=5
+		while ! git push "$@"; do
+			attempts=$((attempts + 1))
+			if [ "$attempts" -ge "$max_attempts" ]; then
+				echo "Failed to push after $max_attempts attempts."
+				return 1
+			fi
+			echo "Retrying push (attempt $attempts of $max_attempts)..."
+			sleep 5
+		done
+	}
 
 	push_lfs_objects() {
 		git lfs ls-files --all -l | awk '{print $1}' | xargs -n 1 -P 8 bash -c '
 			oid="$1"
 			echo "Pushing LFS object: $oid"
+			attempts=0
+			max_attempts=5
 			while ! git lfs push --object-id origin "$oid"; do
-				echo "Retrying LFS object $oid..."
+				attempts=$((attempts + 1))
+				if [ "$attempts" -ge "$max_attempts" ]; then
+					echo "Failed to push LFS object $oid after $max_attempts attempts."
+					exit 1
+				fi
+				echo "Retrying LFS object $oid (attempt $attempts of $max_attempts)..."
 				sleep 5
 			done
 			echo "✓ $oid done"
@@ -1414,7 +1442,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 
 		git add README.md
 		git commit -sm "Add README.md for ${description}"
-		retry_push -f origin "${branch}"
+		retry_push -f origin "${branch}" || exit 1
 
 		git lfs install
 		[ -e ".gitattributes" ] || find . -type f -not -path ".git/*" -size +100M | \
@@ -1423,13 +1451,13 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 		[ -e ".gitattributes" ] && {
 			git add ".gitattributes"
 			git commit -sm "Setup Git LFS"
-			retry_push -u origin "${branch}"
+			retry_push -u origin "${branch}" || exit 1
 		}
 
 		find . -type f -name '*.apk' -exec git add {} +
 		git commit -sm "Add apps for ${description}"
-		push_lfs_objects
-		retry_push -u origin "${branch}"
+		push_lfs_objects || exit 1
+		retry_push -u origin "${branch}" || exit 1
 
 		for i in "${DIRS[@]}"; do
 			[ -d "${i}" ] && git add "${i}"
@@ -1438,12 +1466,12 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 			[ -d vendor/"${i}" ] && git add vendor/"${i}"
 
 			git commit -sm "Add ${i} for ${description}"
-			retry_push -u origin "${branch}"
+			retry_push -u origin "${branch}" || exit 1
 		done
 
 		git add .
 		git commit -sm "Add extras for ${description}"
-		retry_push -u origin "${branch}"
+		retry_push -u origin "${branch}" || exit 1
 	}
 
 	GIT_ORG="${GITLAB_GROUP}"	# Set Your Gitlab Group Name
@@ -1522,10 +1550,16 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" --data "visibility=public" --data-urlencode "description=${REPO_DESC}"
 	printf "\n"
 
-	# Push to GitLab
+	push_attempts=0
+	max_push_attempts=5
 	while ! git ls-remote --exit-code origin "${branch}" >/dev/null 2>&1 || ! git diff --quiet origin/"${branch}" HEAD -- all_files.txt 2>/dev/null
 	do
-		printf "\nPushing to %s via SSH...\nBranch:%s\n" "${GITLAB_HOST}/${GIT_ORG}/${repo}.git" "${branch}"
+		push_attempts=$((push_attempts + 1))
+		if [ "$push_attempts" -ge "$max_push_attempts" ]; then
+			echo "Failed to sync repository with origin branch ${branch} after $max_push_attempts attempts."
+			exit 1
+		fi
+		printf "\nPushing to %s via SSH... (attempt %s of %s)\nBranch:%s\n" "${GITLAB_HOST}/${GIT_ORG}/${repo}.git" "${push_attempts}" "${max_push_attempts}" "${branch}"
 		sleep 1
 		commit_and_push
 		sleep 1

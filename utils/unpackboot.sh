@@ -13,7 +13,7 @@ perr() {
 }
 unpack_complete()
 {
-    [ ! -z $format ] && echo format=$format >> ../img_info
+    [ -n "$format" ] && echo format="$format" >> ../img_info
     pout "Unpack completed."
     exit
 }
@@ -38,37 +38,37 @@ pout "Unpack & decompress $1 to $2"
 # Get boot.img info
 cp -f $1 $tempdir/
 cd $tempdir
-bootimg="$(basename $1)"
-offset=$(grep -abo "ANDROID!\|VNDRBOOT" $bootimg | cut -f 1 -d :)
-[ -z $offset ] && exit
-if [ $offset -gt 0 ]; then
-    dd if=$bootimg of=bootimg bs=$offset skip=1 2>/dev/null
+bootimg="$(basename "$1")"
+offset=$(grep -abo "ANDROID!\|VNDRBOOT" "$bootimg" | cut -f 1 -d : | head -n 1)
+[ -z "$offset" ] && exit
+if [ "$offset" -gt 0 ] 2>/dev/null; then
+    dd if="$bootimg" of=bootimg bs="$offset" skip=1 2>/dev/null
 fi
 header_addr=40
 VNDRBOOT=false
-if grep -qabo VNDRBOOT $bootimg; then
+if grep -qabo VNDRBOOT "$bootimg"; then
     VNDRBOOT=true
     header_addr=8
 fi
 
-kernel_addr=0x$(od -A n -X -j 12 -N 4 $bootimg | sed 's/ //g' | sed 's/^0*//g')
-ramdisk_addr=0x$(od -A n -X -j 20 -N 4 $bootimg | sed 's/ //g' | sed 's/^0*//g')
-second_addr=0x$(od -A n -X -j 28 -N 4 $bootimg | sed 's/ //g' | sed 's/^0*//g')
-tags_addr=0x$(od -A n -X -j 32 -N 4 $bootimg | sed 's/ //g' | sed 's/^0*//g')
-kernel_size=$(od -A n -D -j 8 -N 4 $bootimg | sed 's/ //g')
-ramdisk_size=$(od -A n -D -j 16 -N 4 $bootimg | sed 's/ //g')
-second_size=$(od -A n -D -j 24 -N 4 $bootimg | sed 's/ //g')
-page_size=$(od -A n -D -j 36 -N 4 $bootimg | sed 's/ //g')
-dtb_size=$(od -A n -D -j 40 -N 4 $bootimg | sed 's/ //g')
-dtbo_size=$(od -A n -D -j 1632 -N 4 $bootimg | sed 's/ //g')
-[ $dtbo_size -gt 0 ] && dtbo_addr=0x$(od -A n -X -j 1636 -N 4 $bootimg | sed 's/ //g' | sed -e 's/^0*//g')
-cmd_line=$(od -A n -S1 -j 64 -N 512 $bootimg)
-board=$(od -A n -S1 -j 48 -N 16 $bootimg)
-version=$(od -A n -D -j $header_addr -N 1 $bootimg | sed 's/ //g')
-if [ $version -eq 2 ]; then
-    dtb_size=$(od -A n -D -j 1648 -N 4 $bootimg | sed 's/ //g')
-    dtb_addr=0x$(od -A n -X -j 1652 -N 4 $bootimg | sed 's/ //g' | sed 's/^0*//g')
-elif [ $version -eq 3 ] || [ $version -eq 4 ]; then
+kernel_addr=0x$(od -A n -X -j 12 -N 4 "$bootimg" | sed 's/ //g' | sed 's/^0*//g')
+ramdisk_addr=0x$(od -A n -X -j 20 -N 4 "$bootimg" | sed 's/ //g' | sed 's/^0*//g')
+second_addr=0x$(od -A n -X -j 28 -N 4 "$bootimg" | sed 's/ //g' | sed 's/^0*//g')
+tags_addr=0x$(od -A n -X -j 32 -N 4 "$bootimg" | sed 's/ //g' | sed 's/^0*//g')
+kernel_size=$(od -A n -D -j 8 -N 4 "$bootimg" | sed 's/ //g')
+ramdisk_size=$(od -A n -D -j 16 -N 4 "$bootimg" | sed 's/ //g')
+second_size=$(od -A n -D -j 24 -N 4 "$bootimg" | sed 's/ //g')
+page_size=$(od -A n -D -j 36 -N 4 "$bootimg" | sed 's/ //g')
+dtb_size=$(od -A n -D -j 40 -N 4 "$bootimg" | sed 's/ //g')
+dtbo_size=$(od -A n -D -j 1632 -N 4 "$bootimg" | sed 's/ //g')
+[ -n "$dtbo_size" ] && [ "$dtbo_size" -gt 0 ] 2>/dev/null && dtbo_addr=0x$(od -A n -X -j 1636 -N 4 "$bootimg" | sed 's/ //g' | sed -e 's/^0*//g')
+cmd_line=$(od -A n -S1 -j 64 -N 512 "$bootimg")
+board=$(od -A n -S1 -j 48 -N 16 "$bootimg")
+version=$(od -A n -D -j "$header_addr" -N 1 "$bootimg" | sed 's/ //g')
+if [ "$version" = "2" ] 2>/dev/null; then
+    dtb_size=$(od -A n -D -j 1648 -N 4 "$bootimg" | sed 's/ //g')
+    dtb_addr=0x$(od -A n -X -j 1652 -N 4 "$bootimg" | sed 's/ //g' | sed 's/^0*//g')
+elif [ "$version" = "3" ] || [ "$version" = "4" ] 2>/dev/null; then
     page_size=4096
     board=
     kernel_size=0
@@ -82,32 +82,34 @@ elif [ $version -eq 3 ] || [ $version -eq 4 ]; then
     dtb_size=0
     dtb_addr=
     if [ "$VNDRBOOT" = "true" ]; then
-        kernel_addr=0x$(od -A n -X -j 16 -N 4 $bootimg | sed "s/ //g" | sed "s/^0*//g")
-        ramdisk_addr=0x$(od -A n -X -j 20 -N 4 $bootimg | sed "s/ //g" | sed "s/^0*//g")
-        ramdisk_size=$(od -A n -D -j 24 -N 4 $bootimg | sed "s/ //g")
-        cmd_line=$(od -A n -S1 -j 28 -N 2048 $bootimg)
-        tags_addr=0x$(od -A n -X -j 2076 -N 4 $bootimg | sed "s/ //g" | sed "s/^0*//g")
-        dtb_size=$(od -A n -D -j 2100 -N 4 $bootimg | sed "s/ //g")
-        dtb_addr=0x$(od -A n -X -j 2104 -N 4 $bootimg | sed "s/ //g" | sed "s/^0*//g")
+        kernel_addr=0x$(od -A n -X -j 16 -N 4 "$bootimg" | sed "s/ //g" | sed "s/^0*//g")
+        ramdisk_addr=0x$(od -A n -X -j 20 -N 4 "$bootimg" | sed "s/ //g" | sed "s/^0*//g")
+        ramdisk_size=$(od -A n -D -j 24 -N 4 "$bootimg" | sed "s/ //g")
+        cmd_line=$(od -A n -S1 -j 28 -N 2048 "$bootimg")
+        tags_addr=0x$(od -A n -X -j 2076 -N 4 "$bootimg" | sed "s/ //g" | sed "s/^0*//g")
+        dtb_size=$(od -A n -D -j 2100 -N 4 "$bootimg" | sed "s/ //g")
+        dtb_addr=0x$(od -A n -X -j 2104 -N 4 "$bootimg" | sed "s/ //g" | sed "s/^0*//g")
     else
         kernel_addr=0x00008000 # To reset the base addr to 0
-        kernel_size=$(od -A n -D -j 8 -N 4 $bootimg | sed "s/ //g")
-        ramdisk_size=$(od -A n -D -j 12 -N 4 $bootimg | sed "s/ //g")
-        cmd_line=$(od -A n -S1 -j 44 -N 1536 $bootimg)
-        os_version=$(od -A n -D -j 16 -N 4 $bootimg | sed "s/ //g")
-	patch_level=$(($os_version & ((1<<11) - 1)))
-        os_version=$(($os_version>>11))
-        os_version=$(($os_version>>14)).$(($os_version>>7 & ((1<<7) - 1))).$(($os_version & ((1<<7) - 1)))
-        patch_level=$((($patch_level>>4) + 2000)):$(($patch_level & ((1<<4) - 1)))
+        kernel_size=$(od -A n -D -j 8 -N 4 "$bootimg" | sed "s/ //g")
+        ramdisk_size=$(od -A n -D -j 12 -N 4 "$bootimg" | sed "s/ //g")
+        cmd_line=$(od -A n -S1 -j 44 -N 1536 "$bootimg")
+        os_version=$(od -A n -D -j 16 -N 4 "$bootimg" | sed "s/ //g")
+        if [ -n "$os_version" ] && [ "$os_version" -ne 0 ] 2>/dev/null; then
+            patch_level=$(($os_version & ((1<<11) - 1)))
+            os_version=$(($os_version>>11))
+            os_version=$(($os_version>>14)).$(($os_version>>7 & ((1<<7) - 1))).$(($os_version & ((1<<7) - 1)))
+            patch_level=$((($patch_level>>4) + 2000)):$(($patch_level & ((1<<4) - 1)))
+        fi
     fi
 fi
-base_addr=$((kernel_addr-0x00008000))
-kernel_offset=$((kernel_addr-base_addr))
-ramdisk_offset=$((ramdisk_addr-base_addr))
-second_offset=$((second_addr-base_addr))
-tags_offset=$((tags_addr-base_addr))
-dtbo_offset=$((dtbo_addr-base_addr))
-dtb_offset=$((dtb_addr-base_addr))
+base_addr=$((${kernel_addr:-0}-0x00008000))
+kernel_offset=$((${kernel_addr:-0}-base_addr))
+ramdisk_offset=$((${ramdisk_addr:-0}-base_addr))
+second_offset=$((${second_addr:-0}-base_addr))
+tags_offset=$((${tags_addr:-0}-base_addr))
+dtbo_offset=$((${dtbo_addr:-0}-base_addr))
+dtb_offset=$((${dtb_addr:-0}-base_addr))
 base_addr=$(printf "%08x" $base_addr)
 kernel_offset=$(printf "%08x" $kernel_offset)
 ramdisk_offset=$(printf "%08x" $ramdisk_offset)
@@ -123,7 +125,7 @@ tags_offset=0x${tags_offset:0-8}
 dtbo_offset=0x${dtbo_offset:0-8}
 dtb_offset=0x${dtb_offset:0-8}
 
-if [ $version -gt 2 ] && [ "$VNDRBOOT" == "false" ]; then
+if [ -n "$version" ] && [ "$version" -gt 2 ] 2>/dev/null && [ "$VNDRBOOT" == "false" ]; then
     tags_offset=
     ramdisk_offset=
 elif [ "$VNDRBOOT" == "true" ]; then
@@ -222,8 +224,8 @@ ramdisk_offset=$ramdisk_offset\ntags_offset=$tags_offset\ndtbo_offset=$dtbo_offs
 
 # MTK ramdisk (MTK Header Size 512, MAGIC 0x58881688)
 mtk_header_magic="58881688"
-ramdisk_packed_header=$(od -A n -X -j 0 -N 4 ramdisk.packed | sed 's/ //g')
-if [ $ramdisk_packed_header = $mtk_header_magic ]; then
+ramdisk_packed_header=$(od -A n -X -j 0 -N 4 ramdisk.packed 2>/dev/null | sed 's/ //g')
+if [ "$ramdisk_packed_header" = "$mtk_header_magic" ]; then
     mv ramdisk.packed ramdisk.packed.mtk
     dd if=ramdisk.packed.mtk of=ramdisk.packed ibs=512 skip=1 2>/dev/null
     dd if=ramdisk.packed.mtk of=ramdisk.mtk_header bs=512 count=1 2>/dev/null
