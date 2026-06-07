@@ -1,0 +1,12 @@
+# .dumprxenv.example
+# Copy this file to .dumprxenv and fill in your credentials.
+# Do NOT commit your actual .dumprxenv file to git!
+
+# GitLab Configuration
+export GITLAB_TOKEN=""
+export GITLAB_INSTANCE="gitlab.com"
+export GITLAB_GROUP="" # Optional: Your GitLab group name. If empty, your username will be used.
+
+# Telegram Configuration
+export TG_TOKEN=""
+export TG_CHAT="" # Optional: Your Telegram chat ID. If empty, "@DumprXDumps" will be used.

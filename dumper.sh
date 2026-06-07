@@ -103,8 +103,10 @@ if echo "${PROJECT_DIR}" | grep " "; then
 	exit 1
 fi
 
-# Source environment variables from .dumprxenv
-source "${PROJECT_DIR}"/.dumprxenv
+# Source environment variables from .dumprxenv if it exists
+if [[ -f "${PROJECT_DIR}/.dumprxenv" ]]; then
+	source "${PROJECT_DIR}/.dumprxenv"
+fi
 
 # Cleanup trap — prevent disk space leaks on unexpected exit
 cleanup() {

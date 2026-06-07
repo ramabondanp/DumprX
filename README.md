@@ -58,11 +58,20 @@ Help Context:
          *.nb0 | .*chunk* | *.pac | *super*.img | *system*.sin
 ```
 
-## How to use it to Upload the Dump in GitHub
+## How to use it to Upload the Dump to GitLab
 
-- Copy your GITHUB_TOKEN in a file named .github_token and add your GitHub Organization name in another file named .github_orgname inside the project directory.
-  - If only Token is given but Organization is not, your Git Username will be used.
-- Copy your Telegram Token in a file named .tg_token and Telegram Chat/Channel ID in another file named .tg_chat file if you want to publish the uploading info in Telegram.
+To automatically push your firmware dumps to a GitLab repository (default mode) and receive Telegram notifications:
+
+1. Copy the environment template to create your config file:
+   ```bash
+   cp .dumprxenv.example .dumprxenv
+   ```
+2. Open `.dumprxenv` and fill in your credentials/configurations:
+   - `GITLAB_TOKEN`: Your personal GitLab access token.
+   - `GITLAB_INSTANCE`: The GitLab host domain (defaults to `gitlab.com`).
+   - `GITLAB_GROUP`: Optional GitLab group/organization name. If left blank, your username will be used.
+   - `TG_TOKEN`: Optional Telegram bot token to send status messages.
+   - `TG_CHAT`: Optional Telegram chat/channel ID (defaults to `@DumprXDumps`).
 
 ## Main Scripture Credit
 
