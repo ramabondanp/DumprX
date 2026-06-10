@@ -717,13 +717,55 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	elif [[ $(echo "$ARCHIVE_LISTING" | grep "super.img") ]]; then
 		echo "Super Image detected"
 		foundsupers=$(echo "$ARCHIVE_LISTING" | gawk '{ print $NF }' | grep "super.img")
-		${BIN_7ZZ} e -y "${FILEPATH}" $foundsupers dummypartition 2>/dev/null >> ${WORK_TMPDIR}/zip.log
-		superchunk=$(ls | grep chunk | grep super | sort)
-		if [[ $(echo "$superchunk" | grep "sparsechunk") ]]; then
-			"${SIMG2IMG}" $(echo "$superchunk" | tr '\n' ' ') super.img.raw 2>/dev/null
-			rm -rf *super*chunk*
+		# Check for duplicate super.img names (root + subfolder) that need merging
+		super_name_count=$(echo "$foundsupers" | awk -F/ '{print $NF}' | sort | uniq -c | awk '{print $1}' | sort -nr | head -1)
+		if [[ "$super_name_count" -gt 1 ]]; then
+			echo "Multiple super.img images detected ($super_name_count)"
+			# Extract root super.img
+			root_sup=$(echo "$foundsupers" | grep -v "/" | head -1)
+			sub_supers=$(echo "$foundsupers" | grep "/")
+			${BIN_7ZZ} e -y -- "${FILEPATH}" "${root_sup:-$(echo "$foundsupers" | head -1)}" dummypartition 2>/dev/null >> ${WORK_TMPDIR}/zip.log
+			# Extract subfolder entries with paths preserved
+			if [[ -n "$sub_supers" ]]; then
+				${BIN_7ZZ} x -y -- "${FILEPATH}" ${sub_supers} dummypartition 2>/dev/null >> ${WORK_TMPDIR}/zip.log
+			fi
+			# Follow manual extract_super logic
+			if [[ -f super.img ]]; then
+				extra=$(find . -maxdepth 2 -mindepth 2 -type f -name "super.img" -print -quit)
+				if [[ -n "$extra" ]]; then
+					echo "Merging super.img with $extra..."
+					"${SIMG2IMG}" super.img "$extra" super.raw || {
+						echo "simg2img merge failed, using single super.img"
+						mv super.img super.raw
+					}
+					rm -f super.img "$extra"
+				else
+					"${SIMG2IMG}" super.img super.raw 2>/dev/null || mv super.img super.raw
+					rm -f super.img
+				fi
+			fi
+			# Extract partitions from super.raw
+			if [[ -f super.raw ]]; then
+				echo "Extracting partitions from super.raw..."
+				for partition in $PARTITIONS; do
+					($LPUNPACK --partition="$partition"_a super.raw || $LPUNPACK --partition="$partition" super.raw) 2>/dev/null
+					if [ -f "$partition"_a.img ]; then
+						mv "$partition"_a.img "$partition".img
+					fi
+				done
+				rm -f super.raw
+			fi
+			# Clean empty dirs from path extraction
+			find . -type d -empty -delete 2>/dev/null
+		else
+			${BIN_7ZZ} e -y -- "${FILEPATH}" ${foundsupers} dummypartition 2>/dev/null >> ${WORK_TMPDIR}/zip.log
+			superchunk=$(ls | grep chunk | grep super | sort)
+			if [[ $(echo "$superchunk" | grep "sparsechunk") ]]; then
+				"${SIMG2IMG}" $(echo "$superchunk" | tr '\n' ' ') super.img.raw 2>/dev/null
+				rm -rf *super*chunk*
+			fi
+			superimage_extract || exit 1
 		fi
-		superimage_extract || exit 1
 	elif [[ $(find "${WORK_TMPDIR}" -type f -name "super*.*img" | wc -l) -ge 1 ]]; then
 		echo "Super Image Detected"
 		if [[ -f "${FILEPATH}" ]]; then
