@@ -34,6 +34,7 @@ function _usage() {
 	printf "\t   -m, --mode <local|gitlab>   Choose output mode (default: local)\n"
 	printf "\t   -g, --gitlab                Shortcut for --mode gitlab\n"
 	printf "\t   -l, --local                 Shortcut for --mode local\n"
+	printf "\t   --public                    Create GitLab repo as public (default: private)\n"
 	printf "\t   -h, --help                  Show this help and exit\n\n"
 
 	printf " \e[1;34m >> Supported Websites: \e[0m\n"
@@ -55,6 +56,7 @@ printf "\e[32m" && __bannerTop && printf "\e[0m"
 
 # Parse CLI options
 MODE="gitlab"
+REPO_VISIBILITY="private"
 PUSH_ONLY=false
 README_ONLY=false
 while [[ $# -gt 0 ]]; do
@@ -69,6 +71,8 @@ while [[ $# -gt 0 ]]; do
 			MODE="gitlab"; shift ;;
 		-l|--local)
 			MODE="local"; shift ;;
+		--public)
+			REPO_VISIBILITY="public"; shift ;;
 		-h|--help)
 			_usage; exit 0 ;;
 		--)
@@ -1574,7 +1578,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	curl -s \
 	--header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
 	-X POST \
-	"${GITLAB_HOST}/api/v4/projects?name=${codename}&namespace_id=${SUBGRP_ID}&visibility=private" > /dev/null
+	"${GITLAB_HOST}/api/v4/projects?name=${codename}&namespace_id=${SUBGRP_ID}&visibility=public" > /dev/null
 
 	# Get Project/Repo ID — reuse the same jq-based lookup
 	PROJECT_ID=$(get_gitlab_id_by_name "${GITLAB_HOST}/api/v4/groups/${SUBGRP_ID}/projects" "${codename}")
@@ -1588,10 +1592,10 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	# NOTE: Your SSH Keys Needs to be Added to your Gitlab Instance
 	git remote add origin "git@${GITLAB_INSTANCE}:${GIT_ORG}/${repo}.git"
 
-	# Ensure that the target repo is private
+# Ensure the target repo visibility
 	REPO_DESC="${codename}"
 	[[ -n "${transname}" ]] && REPO_DESC="${transname}"
-	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" --data "visibility=private" --data-urlencode "description=${REPO_DESC}"
+	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" --data "visibility=${REPO_VISIBILITY}" --data-urlencode "description=${REPO_DESC}"
 	printf "\n"
 
 	push_attempts=0
