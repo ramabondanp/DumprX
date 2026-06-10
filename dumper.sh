@@ -1574,7 +1574,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	curl -s \
 	--header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
 	-X POST \
-	"${GITLAB_HOST}/api/v4/projects?name=${codename}&namespace_id=${SUBGRP_ID}&visibility=public" > /dev/null
+	"${GITLAB_HOST}/api/v4/projects?name=${codename}&namespace_id=${SUBGRP_ID}&visibility=private" > /dev/null
 
 	# Get Project/Repo ID — reuse the same jq-based lookup
 	PROJECT_ID=$(get_gitlab_id_by_name "${GITLAB_HOST}/api/v4/groups/${SUBGRP_ID}/projects" "${codename}")
@@ -1588,10 +1588,10 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	# NOTE: Your SSH Keys Needs to be Added to your Gitlab Instance
 	git remote add origin "git@${GITLAB_INSTANCE}:${GIT_ORG}/${repo}.git"
 
-	# Ensure that the target repo is public
+	# Ensure that the target repo is private
 	REPO_DESC="${codename}"
 	[[ -n "${transname}" ]] && REPO_DESC="${transname}"
-	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" --data "visibility=public" --data-urlencode "description=${REPO_DESC}"
+	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" --data "visibility=private" --data-urlencode "description=${REPO_DESC}"
 	printf "\n"
 
 	push_attempts=0
