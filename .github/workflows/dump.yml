@@ -2,6 +2,15 @@ name: DumprX – Dump Firmware & Push to GitLab
 
 on:
   workflow_dispatch:
+    inputs:
+      visibility:
+        description: 'GitLab repository visibility'
+        type: choice
+        required: true
+        default: 'private'
+        options:
+          - private
+          - public
 
 jobs:
   dump:
@@ -105,4 +114,5 @@ jobs:
 
       - name: Push to GitLab
         run: |
-          ./dumper.sh -g -p
+          PUBLIC_FLAG="${{ inputs.visibility == 'public' && '--public' || '' }}"
+          ./dumper.sh -g -p $PUBLIC_FLAG
