@@ -1456,6 +1456,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	push_lfs_objects() {
 		git lfs ls-files --all -l | awk '{print $1}' | xargs -n 1 -P 8 bash -c '
 			oid="$1"
+			[ -n "$oid" ] || exit 0
 			echo "Pushing LFS object: $oid"
 			attempts=0
 			max_attempts=5
@@ -1598,20 +1599,8 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" --data "visibility=${REPO_VISIBILITY}" --data-urlencode "description=${REPO_DESC}"
 	printf "\n"
 
-	push_attempts=0
-	max_push_attempts=5
-	while ! git ls-remote --exit-code origin "${branch}" >/dev/null 2>&1 || ! git diff --quiet origin/"${branch}" HEAD -- all_files.txt 2>/dev/null
-	do
-		push_attempts=$((push_attempts + 1))
-		if [ "$push_attempts" -ge "$max_push_attempts" ]; then
-			echo "Failed to sync repository with origin branch ${branch} after $max_push_attempts attempts."
-			exit 1
-		fi
-		printf "\nPushing to %s via SSH... (attempt %s of %s)\nBranch:%s\n" "${GITLAB_HOST}/${GIT_ORG}/${repo}.git" "${push_attempts}" "${max_push_attempts}" "${branch}"
-		sleep 1
-		commit_and_push
-		sleep 1
-	done
+	printf "\nPushing to %s via SSH...\nBranch:%s\n" "${GITLAB_HOST}/${GIT_ORG}/${repo}.git" "${branch}"
+	commit_and_push
 
 	# Update the Default Branch
 	curl	--request PUT \
