@@ -1,0 +1,108 @@
+name: DumprX – Dump Firmware & Push to GitLab
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout DumprX
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            unace unrar zip unzip p7zip-full p7zip-rar sharutils rar \
+            uudeview mpack arj cabextract device-tree-compiler liblzma-dev \
+            python3-pip brotli liblz4-tool axel gawk aria2 detox cpio \
+            rename liblz4-dev jq git-lfs rsync file libarchive-tools
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up GitLab SSH
+        env:
+          GITLAB_SSH_KEY: ${{ secrets.GITLAB_SSH_KEY }}
+          GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${GITLAB_SSH_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${GITLAB_INSTANCE}" >> ~/.ssh/known_hosts 2>/dev/null
+          git config --global user.email "dumprx@github.actions"
+          git config --global user.name "DumprX CI"
+
+      - name: Verify GitLab SSH connection
+        env:
+          GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
+          GITLAB_SSH_USER: ${{ secrets.GITLAB_SSH_USER || 'git' }}
+        run: |
+          echo "Testing SSH connection to ${GITLAB_INSTANCE}..."
+          if ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -T "${GITLAB_SSH_USER}@${GITLAB_INSTANCE}" 2>&1; then
+            echo "SSH connection successful."
+          else
+            exit_code=$?
+            # ssh -T returns 1 on success (remote closes), any other code is an actual error
+            if [ "$exit_code" -eq 1 ]; then
+              echo "SSH connection successful (exit code 1 = remote closed)."
+            else
+              echo "::error::SSH connection to ${GITLAB_INSTANCE} failed with exit code ${exit_code}."
+              echo "::error::Check that GITLAB_SSH_KEY is a valid private key registered on your GitLab instance."
+              exit "$exit_code"
+            fi
+          fi
+
+      - name: Write .dumprxenv
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
+          GITLAB_GROUP: ${{ secrets.GITLAB_GROUP }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+        run: |
+          cat > .dumprxenv <<EOF
+          export GITLAB_TOKEN="${GITLAB_TOKEN}"
+          export GITLAB_INSTANCE="${GITLAB_INSTANCE}"
+          export GITLAB_GROUP="${GITLAB_GROUP}"
+          export TG_TOKEN="${TG_TOKEN}"
+          export TG_CHAT="${TG_CHAT}"
+          EOF
+          # Remove leading whitespace from heredoc indentation
+          sed -i 's/^[[:space:]]*//' .dumprxenv
+
+      - name: Validate inputs
+        run: |
+          if [[ -z "${{ secrets.FIRMWARE_URL }}" ]]; then
+            echo "::error::FIRMWARE_URL secret is required"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.GITLAB_TOKEN }}" ]]; then
+            echo "::error::GITLAB_TOKEN secret is required"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.GITLAB_SSH_KEY }}" ]]; then
+            echo "::error::GITLAB_SSH_KEY secret is required"
+            exit 1
+          fi
+
+      - name: Extract firmware (local mode)
+        env:
+          FIRMWARE_URL: ${{ secrets.FIRMWARE_URL }}
+        run: |
+          chmod +x dumper.sh
+          ./dumper.sh -l "${FIRMWARE_URL}"
+
+      - name: Prune unnecessary data
+        run: |
+          rm -rf /tmp/out/tr_region/operator/
+          df -h /tmp/out | tail -1
+
+      - name: Push to GitLab
+        run: |
+          ./dumper.sh -g -p
