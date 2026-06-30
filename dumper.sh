@@ -1000,55 +1000,59 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 		printf "dtbo extracted\n"
 	fi
 
-	# Extract Partitions
-	for p in $PARTITIONS; do
-		if ! [[ "${p}" =~ ^(boot|init_boot|recovery|dtbo|vendor_boot|tz|vbmeta)$ ]]; then
-			if [[ -e "$p.img" ]]; then
-				mkdir "$p" 2> /dev/null || rm -rf "${p:?}"/*
-				echo "Trying to extract $p partition via fsck.erofs."
-				"${FSCK_EROFS}" --extract="$p" "$p".img
-				if [ $? -eq 0 ]; then
-					rm "$p".img > /dev/null 2>&1
-				else
-					if [[ -f "$p.img" ]] && [[ "$p" != "modem" ]]; then
-						echo "Extraction via fsck.erofs failed, extracting $p partition via 7zz"
-						rm -rf "${p}"/*
-						${BIN_7ZZ} x -snld "$p".img -y -o"$p"/ > /dev/null 2>&1
-						if [ $? -eq 0 ]; then
-							rm -fv "$p".img > /dev/null 2>&1
-						else
-							echo "Extraction via 7zz failed!"
-							echo "Couldn't extract $p partition via 7zz. Using mount loop"
-							local mount_success=false
-							if sudo mount -o loop -t auto "$p".img "$p" 2>/dev/null; then
-								if mkdir "${p}_" 2>/dev/null; then
-									if sudo cp -a "${p}/." "${p}_/"; then
-										mount_success=true
-									fi
-								fi
-								sudo umount "${p}" 2>/dev/null
-								if [ "$mount_success" = "true" ]; then
-									sudo cp -a "${p}_/." "${p}/" 2>/dev/null
-									sudo rm -rf "${p}_" 2>/dev/null
-									sudo chown -R "$(whoami)" "${p}"/* 2>/dev/null
-									chmod -R u+rwX "${p}"/* 2>/dev/null
-								else
-									sudo rm -rf "${p}_" 2>/dev/null
-								fi
-							fi
-							if [ "$mount_success" = "true" ]; then
-								rm -fv "$p".img > /dev/null 2>&1
-							else
-								echo "Couldn't extract $p partition. It might use an unsupported filesystem or mounting failed."
-								echo "For EROFS: make sure you're using Linux 5.4+ kernel."
-								echo "For F2FS: make sure you're using Linux 5.15+ kernel."
-							fi
-						fi
-					fi
+	# Extract Partitions (parallel; each erofs image is single-threaded, so run several at once)
+	extract_fs_partition() {
+		local p="$1"
+		mkdir "$p" 2> /dev/null || rm -rf "${p:?}"/*
+		echo "Trying to extract $p partition via fsck.erofs."
+		if "${FSCK_EROFS}" --extract="$p" "$p".img > /dev/null 2>&1; then
+			rm -f "$p".img > /dev/null 2>&1
+			return 0
+		fi
+		# modem is raw (not a filesystem) — leave the .img as-is on erofs failure
+		[[ -f "$p.img" && "$p" != "modem" ]] || return 0
+		echo "Extraction via fsck.erofs failed, extracting $p partition via 7zz"
+		rm -rf "${p}"/*
+		if ${BIN_7ZZ} x -snld "$p".img -y -o"$p"/ > /dev/null 2>&1; then
+			rm -fv "$p".img > /dev/null 2>&1
+			return 0
+		fi
+		echo "Extraction via 7zz failed!"
+		echo "Couldn't extract $p partition via 7zz. Using mount loop"
+		local mount_success=false
+		if sudo mount -o loop -t auto "$p".img "$p" 2>/dev/null; then
+			if mkdir "${p}_" 2>/dev/null; then
+				if sudo cp -a "${p}/." "${p}_/"; then
+					mount_success=true
 				fi
 			fi
+			sudo umount "${p}" 2>/dev/null
+			if [ "$mount_success" = "true" ]; then
+				sudo cp -a "${p}_/." "${p}/" 2>/dev/null
+				sudo rm -rf "${p}_" 2>/dev/null
+				sudo chown -R "$(whoami)" "${p}"/* 2>/dev/null
+				chmod -R u+rwX "${p}"/* 2>/dev/null
+			else
+				sudo rm -rf "${p}_" 2>/dev/null
+			fi
 		fi
+		if [ "$mount_success" = "true" ]; then
+			rm -fv "$p".img > /dev/null 2>&1
+		else
+			echo "Couldn't extract $p partition. It might use an unsupported filesystem or mounting failed."
+			echo "For EROFS: make sure you're using Linux 5.4+ kernel."
+			echo "For F2FS: make sure you're using Linux 5.15+ kernel."
+		fi
+	}
+
+	EROFS_MAXJOBS="${DUMPRX_JOBS:-$(nproc 2>/dev/null || echo 4)}"
+	for p in $PARTITIONS; do
+		[[ "${p}" =~ ^(boot|init_boot|recovery|dtbo|vendor_boot|tz|vbmeta)$ ]] && continue
+		[[ -e "$p.img" ]] || continue
+		extract_fs_partition "$p" &
+		while (( $(jobs -rp | wc -l) >= EROFS_MAXJOBS )); do wait -n; done
 	done
+	wait
 
 	# Identify partitions extracted from super_*.img chunks
 	if compgen -G "super_*.img" > /dev/null; then
