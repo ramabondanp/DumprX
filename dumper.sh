@@ -376,7 +376,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 			if [ -f "$partition"_a.img ]; then
 				mv "$partition"_a.img "$partition".img
 			else
-				foundpartitions=$(echo "$ARCHIVE_LISTING" | rev | gawk '{ print $1 }' | rev | grep $partition.img)
+				foundpartitions=$(echo "$ARCHIVE_LISTING" | rev | gawk '{ print $1 }' | rev | grep -E "(^|/)${partition}\.img$")
 				${BIN_7ZZ} e -y "${FILEPATH}" $foundpartitions dummypartition 2>/dev/null >> $WORK_TMPDIR/zip.log
 			fi
 		done
@@ -897,8 +897,11 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	# Process All partitions From WORK_TMPDIR Now
 	for partition in ${PARTITIONS}; do
 		if [[ ! -f "${partition}".img ]]; then
-			foundpart=$(echo "$ARCHIVE_LISTING" | gawk '{print $NF}' | grep "${partition}.img" 2>/dev/null)
-			${BIN_7ZZ} e -y -- "${FILEPATH}" "${foundpart}" */"${foundpart}" 2>/dev/null >> "${WORK_TMPDIR}"/zip.log
+			foundpart=$(echo "$ARCHIVE_LISTING" | gawk '{print $NF}' | grep -E "(^|/)${partition}\.img$" 2>/dev/null)
+			while IFS= read -r fp; do
+				[[ -z "${fp}" ]] && continue
+				${BIN_7ZZ} e -y -- "${FILEPATH}" "${fp}" 2>/dev/null >> "${WORK_TMPDIR}"/zip.log
+			done <<< "${foundpart}"
 		fi
 		[[ -f "${partition}".img ]] && "${SIMG2IMG}" "${partition}".img "${OUTDIR}"/"${partition}".img 2>/dev/null
 		[[ ! -s "${OUTDIR}"/"${partition}".img && -f "${WORK_TMPDIR}"/"${partition}".img ]] && mv "${WORK_TMPDIR}"/"${partition}".img "${OUTDIR}"/"${partition}".img
