@@ -11,6 +11,10 @@ on:
         options:
           - private
           - public
+      firmware_url:
+        description: 'Public firmware URL (overrides FIRMWARE_URL secret when set)'
+        type: string
+        required: false
 
 jobs:
   dump:
@@ -103,8 +107,8 @@ jobs:
 
       - name: Validate inputs
         run: |
-          if [[ -z "${{ secrets.FIRMWARE_URL }}" ]]; then
-            echo "::error::FIRMWARE_URL secret is required"
+          if [[ -z "${{ inputs.firmware_url }}" && -z "${{ secrets.FIRMWARE_URL }}" ]]; then
+            echo "::error::firmware_url input or FIRMWARE_URL secret is required"
             exit 1
           fi
           if [[ -z "${{ secrets.GITLAB_TOKEN }}" ]]; then
@@ -118,7 +122,7 @@ jobs:
 
       - name: Extract firmware (local mode)
         env:
-          FIRMWARE_URL: ${{ secrets.FIRMWARE_URL }}
+          FIRMWARE_URL: ${{ inputs.firmware_url || secrets.FIRMWARE_URL }}
         run: |
           chmod +x dumper.sh
           ./dumper.sh -l "${FIRMWARE_URL}"
