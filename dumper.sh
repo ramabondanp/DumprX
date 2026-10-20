@@ -1163,8 +1163,8 @@ sort -u < "${WORK_TMPDIR}"/board-info.txt > "${OUTDIR}"/board-info.txt
 [[ $(find "$(pwd)"/system "$(pwd)"/system/system "$(pwd)"/vendor "$(pwd)"/*product -maxdepth 2 -type f -name "build*.prop" 2>/dev/null | sort -u | gawk '{print $NF}') ]] || { printf "No system/vendor/product build*.prop found, pushing cancelled.\n" && exit 1; }
 
 flavor=$(prop_get \
-	"ro.build.flavor:{system,system/system,vendor}" \
-	"ro.vendor.build.flavor:vendor" \
+	"ro.vendor.build.flavor:{vendor,odm,vendor/odm}" \
+	"ro.build.flavor:{vendor,odm,product,system,system/system}" \
 	"ro.system.build.flavor:{system,system/system}" \
 	"ro.build.type:{system,system/system}" \
 )
@@ -1247,11 +1247,10 @@ codename=$(prop_get \
 [[ -z "${codename}" ]] && codename=$(grep -m1 -oP "(?<=^ro.build.fota.version=).*" -hs {system,system/system}/build*.prop | cut -d'-' -f1 | head -1)
 [[ -z "${codename}" ]] && codename=$(prop_get "ro.build.product:{vendor,system,system/system}")
 description=$(prop_get \
-	"ro.build.description:{system,system/system,vendor}" \
-	"ro.vendor.build.description:vendor" \
+	"ro.vendor.build.description:{vendor,odm,vendor/odm}" \
+	"ro.product.build.description:{product,vendor/euclid/product,system_ext}" \
+	"ro.build.description:{vendor,odm,product,system,system/system}" \
 	"ro.system.build.description:{system,system/system}" \
-	"ro.product.build.description:product" \
-	"ro.product.build.description:product" \
 )
 incremental=$(prop_get \
 	"ro.build.version.incremental:{system,system/system,vendor}" \
@@ -1310,7 +1309,18 @@ xosid=$(prop_get \
 	"ro.build.display.id:tr_region" \
 	"ro.build.display.id:tr_product" \
 )
-if [[ -z "${xosid}" ]] && { [[ -n "${xosver}" ]] || [[ -n "${transname}" ]] || [[ "${manufacturer,,}" =~ (infinix|tecno|itel|transsion) ]]; }; then
+
+# Detect Transsion firmware so non-Transsion dumps never get Transsion-specific labels
+is_transsion=false
+if [[ "${manufacturer,,}" =~ (infinix|tecno|itel|transsion) ]] \
+	|| [[ "${brand,,}" =~ (infinix|tecno|itel|transsion) ]] \
+	|| [[ -n "${transname}" ]] \
+	|| [[ -n "${xosver}" ]] \
+	|| [[ -d tr_manifest || -d tr_region || -d tr_product ]]; then
+	is_transsion=true
+fi
+
+if [[ -z "${xosid}" ]] && [[ "${is_transsion}" == "true" ]]; then
 	xosid=$(prop_get "ro.build.display.id:product")
 fi
 [[ -n "$xosid" ]] && branch="${xosid// /-}"
@@ -1325,59 +1335,6 @@ for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
   fi
 done
 [ -z "${tranchipset}" ] && tranchipset=$(cat tr_product/etc/asset/transettings/cpu_info 2>/dev/null)
-
-CPU_MODEL=$(prop_get "ro.product.oplus.cpuinfo:my_product")
-opchipset=$(grep "model_name=\"$CPU_MODEL\"" my_stock/etc/extension/config_processor_com.android.settings.xml 2>/dev/null | grep -Po '(?<=name_en=")[^"]*')
-
-repo=$(printf "${manufacturer}" && echo -e "/${codename}")
-
-kernel_version=$(strings boot/kernel | grep -m1 -oP 'Linux version \K[\d.]+-[\w-]+')
-[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-1}
-[ -z "$kernel_version" ] && kernel_version=$(zcat boot/kernel | strings | grep -i Android | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
-
-date=$(prop_get \
-	"ro.build.date:tr_manifest" \
-	"ro.vendor.build.date:my_manifest" \
-	"ro.bootimage.build.date:my_manifest" \
-	"ro.build.date:{system,system/system,product}" \
-	"ro.vendor.build.date:vendor" \
-	"ro.system.build.date:{system,system/system}" \
-)
-first_api_level=$(prop_get \
-	"ro.product.first_api_level:{my_manifest,system,system/system,vendor,product}" \
-	"ro.board.first_api_level:vendor" \
-)
-region=$(prop_get \
-	"ro.oplus.image.my_region.type:{my_region,my_manifest}" \
-	"ro.miui.region:{odm,vendor/odm,product,system}" \
-	"ro.csc.country_code:product" \
-)
-display_id=$(prop_get \
-	"ro.build.display.id.show:my_manifest" \
-	"ro.build.display.id:{my_manifest,system,system/system,product,vendor}" \
-)
-oplus_ver=$(prop_get \
-	"ro.build.version.oplusrom.display:{my_manifest,my_product,system_ext}" \
-	"ro.build.version.oplusrom:{my_manifest,my_product,system_ext}" \
-)
-miui_ver=$(prop_get \
-	"ro.mi.os.version.incremental:{odm,vendor/odm,product,system}" \
-	"ro.miui.ui.version.name:{odm,vendor/odm,product,system}" \
-)
-oneui_ver=$(prop_get \
-	"ro.build.version.oneui:{product,system}" \
-	"ro.build.version.sep:{product,system}" \
-)
-vivo_ver=$(prop_get \
-	"ro.vivo.os.build.display.id:{product,system}" \
-	"ro.vivo.os.version:{product,system}" \
-)
-
-# Repo README File
-cat <<EOF > "${OUTDIR}"/README.md
-## FIRMWARE DUMP
-### ${description}
-EOF
 
 for trfile in tr_product/overlay/com_transsion_overlaysuw/*.apk; do
   [ -e "$trfile" ] || continue
@@ -1406,6 +1363,121 @@ opname=$(grep -hs -oP "(?<=^ro.vendor.oplus.market.name=).*" my_manifest/build.p
 [[ -z "${opname}" ]] && opname=$(grep -hs -oP "(?<=^ro.vendor.oplus.market.name=).*" {my_manifest,odm,vendor/odm,my_product,vendor}/build*.prop {my_manifest,odm,vendor/odm,my_product,vendor}/etc/build*.prop 2>/dev/null | grep -v "^${codename}$" | tail -1)
 [[ -z "${opname}" ]] && opname=$(grep -hs -oP "(?<=^ro.vendor.oplus.market.name=).*" my_manifest/build.prop my_manifest/etc/build.prop 2>/dev/null | tail -1)
 
+# If description is empty or generic (e.g. MediaTek MSSI/QSSI/GSI), synthesize a device-specific description
+if [[ -z "${description}" || "${description}" =~ (mssi|qssi|gsi|^aosp_|^sys_) ]]; then
+	device_title="${transname:-${opname:-${xiaominame:-${motoname:-${brand:-${manufacturer}} ${codename}}}}}"
+	device_title="$(echo "${device_title}" | xargs)"
+	if [[ -n "${device_title}" ]]; then
+		description="${device_title} ${release} ${id} ${incremental} ${tags}"
+		description="$(echo "${description}" | xargs)"
+	fi
+fi
+[[ -z "${branch}" || "${branch}" =~ (mssi|qssi|gsi|^aosp_|^sys_) ]] && branch="${description// /-}"
+[[ -n "$xosid" ]] && branch="${xosid// /-}"
+
+CPU_MODEL=$(prop_get "ro.product.oplus.cpuinfo:my_product")
+opchipset=$(grep "model_name=\"$CPU_MODEL\"" my_stock/etc/extension/config_processor_com.android.settings.xml 2>/dev/null | grep -Po '(?<=name_en=")[^"]*')
+
+repo=$(printf "${manufacturer}" && echo -e "/${codename}")
+
+kernel_version=$(strings boot/kernel | grep -m1 -oP 'Linux version \K[\d.]+-[\w-]+')
+[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-1}
+[ -z "$kernel_version" ] && kernel_version=$(zcat boot/kernel | strings | grep -i Android | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
+
+date=$(prop_get \
+	"ro.build.date:tr_manifest" \
+	"ro.vendor.build.date:my_manifest" \
+	"ro.bootimage.build.date:my_manifest" \
+	"ro.build.date:{system,system/system,product}" \
+	"ro.vendor.build.date:vendor" \
+	"ro.system.build.date:{system,system/system}" \
+)
+first_api_level=$(prop_get \
+	"ro.board.first_api_level:{vendor,odm,vendor/odm}" \
+	"ro.board.api_level:{vendor,odm,vendor/odm}" \
+	"ro.product.first_api_level:{vendor,odm,vendor/odm,product,my_manifest,system,system/system}" \
+)
+# 10000 is AOSP CUR_DEVELOPMENT; ignore placeholder or fallback to vendor board API level
+if [[ "${first_api_level}" == "10000" ]]; then
+	first_api_level=$(prop_get \
+		"ro.board.first_api_level:{vendor,odm,vendor/odm}" \
+		"ro.board.api_level:{vendor,odm,vendor/odm}" \
+	)
+	[[ "${first_api_level}" == "10000" ]] && first_api_level=""
+fi
+
+region=$(prop_get \
+	"ro.oplus.image.my_region.type:{my_region,my_manifest}" \
+	"ro.miui.region:{odm,vendor/odm,product,system}" \
+	"ro.csc.country_code:product" \
+	"ro.tr_region.name:{tr_region,tr_manifest,tr_product,product}" \
+	"ro.product.tran.region:{tr_region,tr_manifest,tr_product,product}" \
+	"ro.tran_region.name:{tr_region,tr_manifest,tr_product,product}" \
+	"ro.product.brand.sub:{tr_region,tr_manifest,system/system/euclid/my_product}" \
+)
+if [[ -z "${region}" ]]; then
+	if [[ "${fingerprint}" =~ /([A-Za-z0-9_]+)-([A-Z]{2,5})/ ]]; then
+		region="${BASH_REMATCH[2]}"
+	elif [[ "${xosid}" =~ \(([A-Z]{2})[0-9] ]]; then
+		region="${BASH_REMATCH[1]}"
+	fi
+fi
+
+display_id=$(prop_get \
+	"ro.build.display.id.show:my_manifest" \
+	"ro.build.display.id:{my_manifest,system,system/system,product,vendor}" \
+)
+clean_display_id="${display_id}"
+clean_display_id="${clean_display_id% release-keys}"
+clean_display_id="${clean_display_id% test-keys}"
+[[ -n "${tags}" ]] && clean_display_id="${clean_display_id% ${tags}}"
+
+oplus_ver=$(prop_get \
+	"ro.build.version.oplusrom.display:{my_manifest,my_product,system_ext}" \
+	"ro.build.version.oplusrom:{my_manifest,my_product,system_ext}" \
+)
+miui_ver=$(prop_get \
+	"ro.mi.os.version.incremental:{odm,vendor/odm,product,system}" \
+	"ro.miui.ui.version.name:{odm,vendor/odm,product,system}" \
+)
+oneui_ver=$(prop_get \
+	"ro.build.version.oneui:{product,system}" \
+	"ro.build.version.sep:{product,system}" \
+)
+vivo_ver=$(prop_get \
+	"ro.vivo.os.build.display.id:{product,system}" \
+	"ro.vivo.os.version:{product,system}" \
+)
+
+tran_os_name=""
+if [[ "${is_transsion}" == "true" ]]; then
+	# Brand properties may include suffixes, e.g. "INFINIX MOBILITY LIMITED" or "TECNO MOBILE LIMITED"
+	case "${manufacturer,,} ${brand,,} ${transname,,}" in
+		*infinix*) tran_os_name="XOS" ;;
+		*tecno*)   tran_os_name="HiOS" ;;
+		*itel*)    tran_os_name="itelOS" ;;
+		*)         tran_os_name="TranOS" ;;
+	esac
+fi
+tran_os_ver="${xosver}"
+if [[ "${tran_os_ver,,}" =~ ^(xos|hios|itelos|tranos)[._-]?(.*)$ ]]; then
+	tran_os_ver="${BASH_REMATCH[2]}"
+fi
+tran_os_ver="$(printf '%s' "${tran_os_ver}" | xargs)"
+
+platform_display="${platform}"
+if [ -n "${tranchipset}" ]; then
+	platform_display="${platform} (${tranchipset})"
+elif [ -n "${opchipset}" ]; then
+	platform_display="${platform} (${opchipset})"
+fi
+
+# Repo README File
+cat <<EOF > "${OUTDIR}"/README.md
+## FIRMWARE DUMP
+### ${description}
+EOF
+
 outfile="${OUTDIR}/README.md"
 
 [ -n "${manufacturer}" ]   && echo "- Brand: ${manufacturer}" >> "$outfile"
@@ -1415,23 +1487,11 @@ outfile="${OUTDIR}/README.md"
 [ -n "${motoname}" ]      && echo "- Moto name: ${motoname}" >> "$outfile"
 [ -n "${opname}" ]      && echo "- OP name: ${opname}" >> "$outfile"
 [ -n "${region}" ]         && echo "- Region: ${region}" >> "$outfile"
-
-if [ -n "${platform}" ]; then
-    if [[ "${platform}" == *"ums"* ]] && [ -n "${tranchipset}" ]; then
-        echo "- Platform: ${platform} (${tranchipset})" >> "$outfile"
-    elif [ -n "${tranchipset}" ]; then
-        echo "- Platform: ${platform} (${tranchipset})" >> "$outfile"
-    elif [ -n "${opchipset}" ]; then
-        echo "- Platform: ${platform} (${opchipset})" >> "$outfile"
-    else
-        echo "- Platform: ${platform}" >> "$outfile"
-    fi
-fi
-
+[ -n "${platform}" ]       && echo "- Platform: ${platform_display}" >> "$outfile"
 [ -n "${release}" ]        && echo "- Android version: ${release}" >> "$outfile"
 [ -n "${first_api_level}" ] && echo "- First API level: ${first_api_level}" >> "$outfile"
-[ -n "${xosid}" ]          && echo "- TranOS build: ${xosid}" >> "$outfile"
-[ -n "${xosver}" ]         && echo "- TranOS version: ${xosver}" >> "$outfile"
+[ -n "${tran_os_name}" ] && [ -n "${xosid}" ]  && echo "- ${tran_os_name} build: ${xosid}" >> "$outfile"
+[ -n "${tran_os_name}" ] && [ -n "${xosver}" ] && echo "- ${tran_os_name} version: ${tran_os_ver}" >> "$outfile"
 if [ -n "${oplus_ver}" ]; then
     case "${manufacturer,,}" in
         realme) echo "- RealmeUI version: ${oplus_ver}" >> "$outfile" ;;
@@ -1443,7 +1503,7 @@ fi
 [ -n "${oneui_ver}" ]      && echo "- One UI version: ${oneui_ver}" >> "$outfile"
 [ -n "${vivo_ver}" ]       && echo "- Vivo OS version: ${vivo_ver}" >> "$outfile"
 [ -n "${id}" ]             && echo "- Android build: ${id}" >> "$outfile"
-[ -n "${display_id}" ] && [ "${display_id}" != "${id}" ] && echo "- Display build: ${display_id}" >> "$outfile"
+[ -n "${display_id}" ] && [ "${clean_display_id}" != "${id}" ] && echo "- Display build: ${display_id}" >> "$outfile"
 [ -n "${sec_patch}" ]      && echo "- Security patch: ${sec_patch}" >> "$outfile"
 [ -n "${date}" ]           && echo "- Build date: ${date}" >> "$outfile"
 [ -n "${kernel_version}" ] && echo "- Kernel version: ${kernel_version}" >> "$outfile"
@@ -1855,11 +1915,11 @@ fi
 		[ ! -z "${motoname}" ] && printf "\n<b>Moto name: %s</b>" "<code>${motoname}</code>"
 		[ ! -z "${opname}" ] && printf "\n<b>OP name: %s</b>" "<code>${opname}</code>"
 		[ ! -z "${region}" ] && printf "\n<b>Region: %s</b>" "<code>${region}</code>"
-		printf "\n<b>Platform: %s</b>" "<code>${platform}${ts_chipset}</code>"
+		[ ! -z "${platform}" ] && printf "\n<b>Platform: %s</b>" "<code>${platform_display}</code>"
 		printf "\n<b>Android ver: %s</b>" "<code>${release}</code>"
 		[ ! -z "${first_api_level}" ] && printf "\n<b>First API: %s</b>" "<code>${first_api_level}</code>"
-		[ ! -z "${xosid}" ] && printf "\n<b>TranOS build: %s</b>" "<code>${xosid}</code>"
-		[ ! -z "${xosver}" ] && printf "\n<b>TranOS ver: %s</b>" "<code>${xosver}</code>"
+		[ ! -z "${tran_os_name}" ] && [ ! -z "${xosid}" ] && printf "\n<b>%s build: %s</b>" "${tran_os_name}" "<code>${xosid}</code>"
+		[ ! -z "${tran_os_name}" ] && [ ! -z "${xosver}" ] && printf "\n<b>%s ver: %s</b>" "${tran_os_name}" "<code>${tran_os_ver}</code>"
 		if [ -n "${oplus_ver}" ]; then
 			case "${manufacturer,,}" in
 				realme) printf "\n<b>RealmeUI ver: %s</b>" "<code>${oplus_ver}</code>" ;;
@@ -1871,7 +1931,7 @@ fi
 		[ ! -z "${oneui_ver}" ] && printf "\n<b>One UI ver: %s</b>" "<code>${oneui_ver}</code>"
 		[ ! -z "${vivo_ver}" ] && printf "\n<b>Vivo OS ver: %s</b>" "<code>${vivo_ver}</code>"
 		printf "\n<b>Android build: %s</b>" "<code>${id}</code>"
-		[ ! -z "${display_id}" ] && [ "${display_id}" != "${id}" ] && printf "\n<b>Display build: %s</b>" "<code>${display_id}</code>"
+		[ ! -z "${display_id}" ] && [ "${clean_display_id}" != "${id}" ] && printf "\n<b>Display build: %s</b>" "<code>${display_id}</code>"
 		printf "\n<b>Security patch: %s</b>" "<code>${sec_patch}</code>"
 		[ ! -z "${date}" ] && printf "\n<b>Build date: %s</b>" "<code>${date}</code>"
 		[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel ver: %s</b>" "<code>${kernel_version}</code>"
