@@ -1295,6 +1295,16 @@ prop_override fingerprint \
 	"ro.tr_product.build.fingerprint:tr_product" \
 	"ro.product.build.fingerprint:product"
 [[ -z "$fingerprint" ]] && prop_override fingerprint "ro.tr_region.build.fingerprint:tr_region"
+prop_override incremental \
+	"ro.build.version.incremental:my_manifest" \
+	"ro.build.version.incremental:tr_manifest" \
+	"ro.tr_product.build.version.incremental:tr_product" \
+	"ro.product.build.version.incremental:product"
+[[ -z "$incremental" ]] && prop_override incremental "ro.tr_region.build.version.incremental:tr_region"
+if [[ -n "${fingerprint}" ]]; then
+	fp_incremental=$(echo "${fingerprint}" | cut -d':' -f2 | cut -d'/' -f3)
+	[[ -n "${fp_incremental}" && "${fp_incremental}" != "${incremental}" ]] && incremental="${fp_incremental}"
+fi
 prop_override brand "ro.product.system_ext.brand:system_ext"
 prop_override density "ro.sf.lcd_density:{vendor,system,system/system,odm}"
 transname=$(prop_get "ro.product.product.tran.device.name.default:product")
@@ -1392,16 +1402,12 @@ date=$(prop_get \
 	"ro.vendor.build.date:vendor" \
 	"ro.system.build.date:{system,system/system}" \
 )
-first_api_level=$(prop_get \
-	"ro.board.first_api_level:{vendor,odm,vendor/odm}" \
-	"ro.board.api_level:{vendor,odm,vendor/odm}" \
-	"ro.product.first_api_level:{vendor,odm,vendor/odm,product,my_manifest,system,system/system}" \
-)
-# 10000 is AOSP CUR_DEVELOPMENT; ignore placeholder or fallback to vendor board API level
-if [[ "${first_api_level}" == "10000" ]]; then
+first_api_level=$(find {tr_product,vendor,odm,vendor/odm,product,my_manifest,system,system/system} -maxdepth 2 -type f -name "build*.prop" 2>/dev/null | xargs -r grep -h -oP "(?<=^ro\.product\.first_api_level=).*" 2>/dev/null | grep -v "^10000$" | tail -1)
+if [[ -z "${first_api_level}" ]]; then
 	first_api_level=$(prop_get \
 		"ro.board.first_api_level:{vendor,odm,vendor/odm}" \
 		"ro.board.api_level:{vendor,odm,vendor/odm}" \
+		"ro.product.first_api_level:{vendor,odm,vendor/odm,product,my_manifest,system,system/system}" \
 	)
 	[[ "${first_api_level}" == "10000" ]] && first_api_level=""
 fi
@@ -1451,13 +1457,21 @@ vivo_ver=$(prop_get \
 
 tran_os_name=""
 if [[ "${is_transsion}" == "true" ]]; then
-	# Brand properties may include suffixes, e.g. "INFINIX MOBILITY LIMITED" or "TECNO MOBILE LIMITED"
-	case "${manufacturer,,} ${brand,,} ${transname,,}" in
-		*infinix*) tran_os_name="XOS" ;;
-		*tecno*)   tran_os_name="HiOS" ;;
-		*itel*)    tran_os_name="itelOS" ;;
-		*)         tran_os_name="TranOS" ;;
+	tranos_type=$(prop_get "ro.tranos.type:{tr_product,tr_manifest,product}")
+	case "${tranos_type,,}" in
+		xos)   tran_os_name="XOS" ;;
+		hios)  tran_os_name="HiOS" ;;
+		itelos) tran_os_name="itelOS" ;;
 	esac
+	if [[ -z "${tran_os_name}" ]]; then
+		# Brand properties may include suffixes, e.g. "INFINIX MOBILITY LIMITED" or "TECNO MOBILE LIMITED"
+		case "${manufacturer,,} ${brand,,} ${transname,,}" in
+			*infinix*) tran_os_name="XOS" ;;
+			*tecno*)   tran_os_name="HiOS" ;;
+			*itel*)    tran_os_name="itelOS" ;;
+			*)         tran_os_name="TranOS" ;;
+		esac
+	fi
 fi
 tran_os_ver="${xosver}"
 if [[ "${tran_os_ver,,}" =~ ^(xos|hios|itelos|tranos)[._-]?(.*)$ ]]; then
@@ -1470,6 +1484,115 @@ if [ -n "${tranchipset}" ]; then
 	platform_display="${platform} (${tranchipset})"
 elif [ -n "${opchipset}" ]; then
 	platform_display="${platform} (${opchipset})"
+fi
+
+# Transsion Camera & Charging
+rearcam_display=""
+frontcam_display=""
+charging=""
+if [[ "${is_transsion}" == "true" ]]; then
+	rearcam=$(prop_get \
+		"ro.tr_build.rearcamera.config:{tr_product,tr_manifest,product,vendor,odm}" \
+	)
+	frontcam=$(prop_get \
+		"ro.tr_build.frontcamera.config:{tr_product,tr_manifest,product,vendor,odm}" \
+	)
+	charging_power=$(prop_get \
+		"ro.tr_charging.animation_wire_power:{tr_product,tr_manifest,product,vendor,odm}" \
+	)
+	[[ -n "${charging_power}" && "${charging_power}" =~ ^[0-9]+$ ]] && charging="${charging_power}W"
+
+	# Camera Sensors Resolution
+	rear_sensor_list=()
+	if [[ -f "odm/etc/vconfig/camera/tran_camera_stereo_setting.json" ]]; then
+		while IFS= read -r s; do
+			s_clean=$(echo "$s" | sed -e "s/_MIPI_RAW//I" -e "s/_RAW//I" -e "s/WIDE//I" | tr "[:lower:]" "[:upper:]")
+			[[ -n "$s_clean" ]] && rear_sensor_list+=("$s_clean")
+		done < <(jq -r '.Sensors[].Name' odm/etc/vconfig/camera/tran_camera_stereo_setting.json 2>/dev/null)
+	fi
+	if [[ ${#rear_sensor_list[@]} -eq 0 ]]; then
+		s0=$(grep -A 25 "sensor0" dtbodts/*.dts vendor_bootdts/*.dts 2>/dev/null | grep -oP "(?<=sensor-names = \")[^\",]+" | sed "s/_mipi_raw//I; s/_raw//I" | tr "[:lower:]" "[:upper:]" | tail -1)
+		s2=$(grep -A 25 "sensor2" dtbodts/*.dts vendor_bootdts/*.dts 2>/dev/null | grep -oP "(?<=sensor-names = \")[^\",]+" | sed "s/_mipi_raw//I; s/_raw//I; s/WIDE//I" | tr "[:lower:]" "[:upper:]" | head -1)
+		[[ -n "$s0" ]] && rear_sensor_list+=("$s0")
+		[[ -n "$s2" ]] && rear_sensor_list+=("$s2")
+	fi
+
+	front_sensor=""
+	front_sensor=$(grep -A 25 "sensor1" dtbodts/*.dts vendor_bootdts/*.dts 2>/dev/null | grep -oP "(?<=sensor-names = \")[^\",]+" | sed "s/_mipi_raw//I; s/_raw//I" | tr "[:lower:]" "[:upper:]" | head -1)
+	if [[ -z "${front_sensor}" ]]; then
+		front_sensor=$(ls odm/lib64/libCamera_*front* 2>/dev/null | grep -oP "libCamera_\K[a-zA-Z0-9]+" | sed "s/front.*//I" | tr "[:lower:]" "[:upper:]" | head -1)
+	fi
+
+	rear_sensor_str=""
+	if [[ ${#rear_sensor_list[@]} -gt 0 ]]; then
+		rear_sensor_str=$(printf '%s, ' "${rear_sensor_list[@]}")
+		rear_sensor_str="${rear_sensor_str%, }"
+	fi
+
+	rearcam_display="${rearcam}"
+	if [[ -n "${rearcam}" && -n "${rear_sensor_str}" ]]; then
+		rearcam_display="${rearcam} (${rear_sensor_str})"
+	elif [[ -z "${rearcam}" && -n "${rear_sensor_str}" ]]; then
+		rearcam_display="${rear_sensor_str}"
+	fi
+
+	frontcam_display="${frontcam}"
+	if [[ -n "${frontcam}" && -n "${front_sensor}" ]]; then
+		frontcam_display="${frontcam} (${front_sensor})"
+	elif [[ -z "${frontcam}" && -n "${front_sensor}" ]]; then
+		frontcam_display="${front_sensor}"
+	fi
+fi
+
+# Display Information Extraction
+disp_type=""
+is_optical_fp=$(prop_get \
+	"ro.tr_fingerprint.optical.feature.support:{tr_product,tr_manifest,product,vendor,odm}" \
+	"ro.hardware.fingerprint.optical:{vendor,odm,system}" \
+	"vendor.fingerprint.optical:{vendor,odm}" \
+)
+# Optical under-display FP is a physical guarantee of an AMOLED panel.
+# Also check for explicit AMOLED/OLED driver ICs or compatible strings.
+if [[ "${is_optical_fp}" == "1" || "${is_optical_fp}" == "true" ]] \
+	|| grep -qiE "(vtdr|rm69|ea80|sw434|s6e|nt377|nt378|amoled|oled)" dtbodts/*.dts vendor_bootdts/*.dts bootdts/*.dts 2>/dev/null; then
+	disp_type="AMOLED"
+elif grep -qP 'compatible\s*=\s*"[^"]*\bips\b' dtbodts/*.dts vendor_bootdts/*.dts bootdts/*.dts 2>/dev/null; then
+	disp_type="IPS LCD"
+fi
+
+disp_res=""
+lcm_w=$(prop_get \
+	"ro.vendor.camera.lcm.width:{odm,vendor/odm,vendor}" \
+	"ro.display.width:{vendor,system,system/system,product,odm}" \
+	"ro.vendor.display.width:{vendor,odm}" \
+	"ro.sf.lcd_width:{vendor,system,system/system,odm}" \
+)
+lcm_h=$(prop_get \
+	"ro.vendor.camera.lcm.height:{odm,vendor/odm,vendor}" \
+	"ro.display.height:{vendor,system,system/system,product,odm}" \
+	"ro.vendor.display.height:{vendor,odm}" \
+	"ro.sf.lcd_height:{vendor,system,system/system,odm}" \
+)
+if [[ -n "${lcm_w}" && -n "${lcm_h}" ]]; then
+	disp_res="${lcm_w}x${lcm_h}"
+fi
+
+disp_hz=$(grep -hoP "\b(60|90|120|144|165)hz\b" dtbodts/*.dts vendor_bootdts/*.dts bootdts/*.dts 2>/dev/null | sed -e 's/hz/Hz/I' | sort -u | tail -1)
+
+display_info=""
+disp_parts=()
+[[ -n "${disp_type}" ]] && disp_parts+=("${disp_type}")
+[[ -n "${disp_res}" ]] && disp_parts+=("${disp_res}")
+if [[ -n "${disp_hz}" && -n "${density}" && "${density}" != "undefined" ]]; then
+	disp_parts+=("${disp_hz} (${density} dpi)")
+elif [[ -n "${disp_hz}" ]]; then
+	disp_parts+=("${disp_hz}")
+elif [[ -n "${density}" && "${density}" != "undefined" ]]; then
+	disp_parts+=("${density} dpi")
+fi
+if [[ ${#disp_parts[@]} -gt 0 ]]; then
+	display_info=$(printf '%s, ' "${disp_parts[@]}")
+	display_info="${display_info%, }"
 fi
 
 # Repo README File
@@ -1486,12 +1609,17 @@ outfile="${OUTDIR}/README.md"
 [ -n "${xiaominame}" ]      && echo "- Xiaomi name: ${xiaominame}" >> "$outfile"
 [ -n "${motoname}" ]      && echo "- Moto name: ${motoname}" >> "$outfile"
 [ -n "${opname}" ]      && echo "- OP name: ${opname}" >> "$outfile"
-[ -n "${region}" ]         && echo "- Region: ${region}" >> "$outfile"
 [ -n "${platform}" ]       && echo "- Platform: ${platform_display}" >> "$outfile"
+[ -n "${abilist}" ]        && echo "- CPU abilist: ${abilist}" >> "$outfile"
+[ -n "${display_info}" ]   && echo "- Display: ${display_info}" >> "$outfile"
+[ -n "${rearcam_display}" ]  && echo "- Rear camera: ${rearcam_display}" >> "$outfile"
+[ -n "${frontcam_display}" ] && echo "- Front camera: ${frontcam_display}" >> "$outfile"
+[ -n "${charging}" ]       && echo "- Charging: ${charging}" >> "$outfile"
 [ -n "${release}" ]        && echo "- Android version: ${release}" >> "$outfile"
 [ -n "${first_api_level}" ] && echo "- First API level: ${first_api_level}" >> "$outfile"
+[ -n "${id}" ]             && echo "- Android build: ${id}" >> "$outfile"
+[ -n "${display_id}" ] && [ "${clean_display_id}" != "${id}" ] && echo "- Display build: ${display_id}" >> "$outfile"
 [ -n "${tran_os_name}" ] && [ -n "${xosid}" ]  && echo "- ${tran_os_name} build: ${xosid}" >> "$outfile"
-[ -n "${tran_os_name}" ] && [ -n "${xosver}" ] && echo "- ${tran_os_name} version: ${tran_os_ver}" >> "$outfile"
 if [ -n "${oplus_ver}" ]; then
     case "${manufacturer,,}" in
         realme) echo "- RealmeUI version: ${oplus_ver}" >> "$outfile" ;;
@@ -1502,12 +1630,9 @@ fi
 [ -n "${miui_ver}" ]       && echo "- HyperOS/MIUI version: ${miui_ver}" >> "$outfile"
 [ -n "${oneui_ver}" ]      && echo "- One UI version: ${oneui_ver}" >> "$outfile"
 [ -n "${vivo_ver}" ]       && echo "- Vivo OS version: ${vivo_ver}" >> "$outfile"
-[ -n "${id}" ]             && echo "- Android build: ${id}" >> "$outfile"
-[ -n "${display_id}" ] && [ "${clean_display_id}" != "${id}" ] && echo "- Display build: ${display_id}" >> "$outfile"
 [ -n "${sec_patch}" ]      && echo "- Security patch: ${sec_patch}" >> "$outfile"
 [ -n "${date}" ]           && echo "- Build date: ${date}" >> "$outfile"
 [ -n "${kernel_version}" ] && echo "- Kernel version: ${kernel_version}" >> "$outfile"
-[ -n "${abilist}" ]        && echo "- CPU abilist: ${abilist}" >> "$outfile"
 [ -n "${fingerprint}" ]    && echo "- Fingerprint: ${fingerprint}" >> "$outfile"
 
 cat "$outfile"
@@ -1914,12 +2039,17 @@ fi
 		[ ! -z "${xiaominame}" ] && printf "\n<b>Xiaomi name: %s</b>" "<code>${xiaominame}</code>"
 		[ ! -z "${motoname}" ] && printf "\n<b>Moto name: %s</b>" "<code>${motoname}</code>"
 		[ ! -z "${opname}" ] && printf "\n<b>OP name: %s</b>" "<code>${opname}</code>"
-		[ ! -z "${region}" ] && printf "\n<b>Region: %s</b>" "<code>${region}</code>"
 		[ ! -z "${platform}" ] && printf "\n<b>Platform: %s</b>" "<code>${platform_display}</code>"
+		[ ! -z "${abilist}" ] && printf "\n<b>CPU abilist: %s</b>" "<code>${abilist}</code>"
+		[ ! -z "${display_info}" ] && printf "\n<b>Display: %s</b>" "<code>${display_info}</code>"
+		[ ! -z "${rearcam_display}" ] && printf "\n<b>Rear camera: %s</b>" "<code>${rearcam_display}</code>"
+		[ ! -z "${frontcam_display}" ] && printf "\n<b>Front camera: %s</b>" "<code>${frontcam_display}</code>"
+		[ ! -z "${charging}" ] && printf "\n<b>Charging: %s</b>" "<code>${charging}</code>"
 		printf "\n<b>Android ver: %s</b>" "<code>${release}</code>"
 		[ ! -z "${first_api_level}" ] && printf "\n<b>First API: %s</b>" "<code>${first_api_level}</code>"
+		printf "\n<b>Android build: %s</b>" "<code>${id}</code>"
+		[ ! -z "${display_id}" ] && [ "${clean_display_id}" != "${id}" ] && printf "\n<b>Display build: %s</b>" "<code>${display_id}</code>"
 		[ ! -z "${tran_os_name}" ] && [ ! -z "${xosid}" ] && printf "\n<b>%s build: %s</b>" "${tran_os_name}" "<code>${xosid}</code>"
-		[ ! -z "${tran_os_name}" ] && [ ! -z "${xosver}" ] && printf "\n<b>%s ver: %s</b>" "${tran_os_name}" "<code>${tran_os_ver}</code>"
 		if [ -n "${oplus_ver}" ]; then
 			case "${manufacturer,,}" in
 				realme) printf "\n<b>RealmeUI ver: %s</b>" "<code>${oplus_ver}</code>" ;;
@@ -1930,12 +2060,9 @@ fi
 		[ ! -z "${miui_ver}" ] && printf "\n<b>HyperOS/MIUI ver: %s</b>" "<code>${miui_ver}</code>"
 		[ ! -z "${oneui_ver}" ] && printf "\n<b>One UI ver: %s</b>" "<code>${oneui_ver}</code>"
 		[ ! -z "${vivo_ver}" ] && printf "\n<b>Vivo OS ver: %s</b>" "<code>${vivo_ver}</code>"
-		printf "\n<b>Android build: %s</b>" "<code>${id}</code>"
-		[ ! -z "${display_id}" ] && [ "${clean_display_id}" != "${id}" ] && printf "\n<b>Display build: %s</b>" "<code>${display_id}</code>"
 		printf "\n<b>Security patch: %s</b>" "<code>${sec_patch}</code>"
 		[ ! -z "${date}" ] && printf "\n<b>Build date: %s</b>" "<code>${date}</code>"
 		[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel ver: %s</b>" "<code>${kernel_version}</code>"
-		[ ! -z "${abilist}" ] && printf "\n<b>CPU abilist: %s</b>" "<code>${abilist}</code>"
 		printf "\n<b>Fingerprint: %s</b>" "<code>${fingerprint}</code>"
 		[ ! -z "${REPO_TREE_URL}" ] && printf "\n<a href=\"%s\">%s</a>" "${REPO_TREE_URL}" "${REPO_TREE_LABEL:-Repository Tree}"
 	} >> "${OUTDIR}"/tg.html
