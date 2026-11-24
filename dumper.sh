@@ -1649,11 +1649,22 @@ if [[ "${is_transsion}" == "true" ]]; then
 		[[ -n "$s0" ]] && rear_sensor_list+=("$s0")
 		[[ -n "$s2" ]] && rear_sensor_list+=("$s2")
 	fi
+	# Newer Transsion DTBOs list the primary rear sensor as the first
+	# cam0_enable_sensor entry. Keep the older sources above; use this only
+	# as a fallback and ignore the alternate module.
+	if [[ ${#rear_sensor_list[@]} -eq 0 ]]; then
+		s_cam0=$(grep -hoP 'cam0_enable_sensor\s*=\s*"\K[^" ]+' dtbodts/*.dts vendor_bootdts/*.dts 2>/dev/null | head -1 | sed -E 's/_mipi_raw$//I; s/_raw$//I; s/(st|ts|txd)$//I' | tr "[:lower:]" "[:upper:]")
+		[[ -n "$s_cam0" ]] && rear_sensor_list+=("$s_cam0")
+	fi
 
 	front_sensor=""
 	front_sensor=$(grep -A 25 "sensor1" dtbodts/*.dts vendor_bootdts/*.dts 2>/dev/null | grep -oP "(?<=sensor-names = \")[^\",]+" | sed "s/_mipi_raw//I; s/_raw//I" | tr "[:lower:]" "[:upper:]" | head -1)
 	if [[ -z "${front_sensor}" ]]; then
 		front_sensor=$(ls odm/lib64/libCamera_*front* 2>/dev/null | grep -oP "libCamera_\K[a-zA-Z0-9]+" | sed "s/front.*//I" | tr "[:lower:]" "[:upper:]" | head -1)
+	fi
+	# Fallback for newer DTBOs: first cam1_enable_sensor entry (non-alternate).
+	if [[ -z "${front_sensor}" ]]; then
+		front_sensor=$(grep -hoP 'cam1_enable_sensor\s*=\s*"\K[^" ]+' dtbodts/*.dts vendor_bootdts/*.dts 2>/dev/null | head -1 | sed -E 's/_mipi_raw$//I; s/_raw$//I; s/(st|ts|txd)$//I' | tr "[:lower:]" "[:upper:]")
 	fi
 
 	rear_sensor_str=""
