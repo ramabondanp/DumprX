@@ -68,7 +68,7 @@ required):
 ```
 
 The output directory can be overridden with `DUMPRX_OUTDIR`. Otherwise the
-script uses the first writable path among `/tmp/out`, `$HOME/tmp/out`,
+script uses the first writable path among `$HOME/tmp/out`, `/tmp/out`,
 `./tmp/out`, and `./out`.
 
 `--local` also accepts an already extracted dump. If `system/build.prop` is

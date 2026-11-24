@@ -20,6 +20,6 @@ export TG_CHAT="" # Optional: Your Telegram chat ID. If empty, "@DumprXDumps" wi
 # export CLEANUP_BLOAT="true"  # Auto-detect and remove bloatware, deletable apps & Google Apps before pushing (default: true)
 
 # Output Directory (optional)
-# export DUMPRX_OUTDIR="/tmp/out"  # Defaults to /tmp/out, then $HOME/tmp/out, then ./tmp/out, then ./out
+# export DUMPRX_OUTDIR="/tmp/out"  # Defaults to $HOME/tmp/out, then /tmp/out, then ./tmp/out, then ./out
 
 

@@ -247,8 +247,8 @@ resolve_output_dir() {
 	local create="${1:-false}" candidate
 	for candidate in \
 		"${DUMPRX_OUTDIR:-}" \
-		"/tmp/out" \
 		"${HOME:+${HOME}/tmp/out}" \
+		"/tmp/out" \
 		"${PROJECT_DIR}/tmp/out" \
 		"${PROJECT_DIR}/out"; do
 		[[ -n "${candidate}" ]] || continue

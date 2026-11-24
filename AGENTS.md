@@ -35,7 +35,7 @@ shellcheck -x setup.sh
 # Generate README only
 ./dumper.sh --readme-only --local <extracted-folder>
 ./dumper.sh -r /path/to/extracted-dump   # explicit dump folder
-./dumper.sh -r                           # reuse an existing dump directory
+./dumper.sh -r                           # reuse $HOME/tmp/out (or fallback dump dir)
 
 # GitLab mode
 ./dumper.sh --gitlab <firmware-file-or-url>
@@ -118,7 +118,7 @@ Current code initializes `MODE="gitlab"` while the help text may mention local a
 | `PROJECT_DIR` | Directory containing `dumper.sh` |
 | `INPUTDIR` | Firmware download/preload directory, usually `${PROJECT_DIR}/input` |
 | `UTILSDIR` | Helper scripts and binaries |
-| `OUTDIR` | Final extracted output; resolved to the first writable of `DUMPRX_OUTDIR`, `/tmp/out`, `$HOME/tmp/out`, `${PROJECT_DIR}/tmp/out`, `${PROJECT_DIR}/out`. With `-r <folder>`, the supplied folder is used directly. |
+| `OUTDIR` | Final extracted output; resolved to the first writable of `DUMPRX_OUTDIR`, `$HOME/tmp/out`, `/tmp/out`, `${PROJECT_DIR}/tmp/out`, `${PROJECT_DIR}/out`. With `-r <folder>`, the supplied folder is used directly. |
 | `WORK_TMPDIR` | Temporary work directory under `OUTDIR/tmp`, or a private temp dir in readme-only mode |
 | `DUMPRX_OUTDIR` | Optional override for the extraction output directory |
 | `MODE` | `local`, `gitlab`, or `github` output behavior |
