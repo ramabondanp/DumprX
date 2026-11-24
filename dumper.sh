@@ -1792,6 +1792,7 @@ outfile="${OUTDIR}/README.md"
 [ -n "${first_api_level}" ] && echo "- First API level: ${first_api_level}" >> "$outfile"
 [ -n "${id}" ]             && echo "- Android build: ${id}" >> "$outfile"
 [ -n "${display_id}" ] && [ "${clean_display_id}" != "${id}" ] && echo "- Display build: ${display_id}" >> "$outfile"
+[ -n "${kernel_version}" ] && echo "- Kernel version: ${kernel_version}" >> "$outfile"
 [ -n "${tran_os_name}" ] && [ -n "${xosid}" ]  && echo "- ${tran_os_name} build: ${xosid}" >> "$outfile"
 if [ -n "${oplus_ver}" ]; then
     case "${manufacturer,,}" in
@@ -1805,7 +1806,6 @@ fi
 [ -n "${vivo_ver}" ]       && echo "- Vivo OS version: ${vivo_ver}" >> "$outfile"
 [ -n "${sec_patch}" ]      && echo "- Security patch: ${sec_patch}" >> "$outfile"
 [ -n "${date}" ]           && echo "- Build date: ${date}" >> "$outfile"
-[ -n "${kernel_version}" ] && echo "- Kernel version: ${kernel_version}" >> "$outfile"
 [ -n "${fingerprint}" ]    && echo "- Fingerprint: ${fingerprint}" >> "$outfile"
 
 cat "$outfile"
