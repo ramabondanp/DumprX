@@ -1553,7 +1553,7 @@ opchipset=$(grep "model_name=\"$CPU_MODEL\"" my_stock/etc/extension/config_proce
 repo=$(printf "${manufacturer}" && echo -e "/${codename}")
 
 kernel_version=$(strings boot/kernel 2>/dev/null | grep -m1 -oP 'Linux version \K[\d.]+-[\w-]+')
-[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel 2>/dev/null | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-1}
+[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel 2>/dev/null | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
 [ -z "$kernel_version" ] && kernel_version=$(zcat boot/kernel 2>/dev/null | strings | grep -i Android | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
 
 date=$(prop_get \
