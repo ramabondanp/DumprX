@@ -193,6 +193,20 @@ else
 	BIN_7ZZ=""
 fi
 
+# Locate aapt2 for decoding overlay resources when apktool is unavailable.
+AAPT2=""
+if command -v aapt2 >/dev/null 2>&1; then
+	AAPT2=$(command -v aapt2)
+else
+	for candidate in \
+		"${ANDROID_HOME:-}/build-tools/"*/aapt2 \
+		"${ANDROID_SDK_ROOT:-}/build-tools/"*/aapt2 \
+		"${HOME:-}/Android/Sdk/build-tools/"*/aapt2 \
+		/opt/android-sdk/build-tools/*/aapt2; do
+		[[ -x "${candidate}" ]] && { AAPT2="${candidate}"; break; }
+	done
+fi
+
 # Run privileged helpers directly as root, or through non-interactive sudo.
 # This prevents password prompts/hangs when --local runs as a normal user.
 run_privileged() {
@@ -1487,6 +1501,21 @@ if command -v apktool >/dev/null 2>&1; then
 	done
 else
 	printf "apktool not found, skipping APK overlay decoding (optional).\n"
+fi
+
+# Fallback when apktool is unavailable: read array/multi_device_name directly
+# from the overlay APK (aapt2 preferred, raw strings as last resort).
+if [[ -z "${transname}" ]]; then
+	for trfile in tr_product/overlay/com_transsion_overlaysuw/*.apk; do
+		[[ -e "${trfile}" ]] || continue
+		if [[ -n "${AAPT2}" ]]; then
+			transname=$("${AAPT2}" dump resources "${trfile}" 2>/dev/null | grep -A1 "array/multi_device_name" | grep -oP 'DEFAULT/\K[^"]+' | head -1)
+		fi
+		if [[ -z "${transname}" ]]; then
+			transname=$(strings -a "${trfile}" 2>/dev/null | grep -oP 'DEFAULT/\K[^"<]+' | head -1)
+		fi
+		[[ -n "${transname}" ]] && break
+	done
 fi
 [ -z "${tranchipset}" ] && tranchipset=$(cat tr_product/etc/asset/transettings/cpu_info 2>/dev/null)
 
