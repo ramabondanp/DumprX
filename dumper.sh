@@ -30,7 +30,7 @@ function _usage() {
 	printf "\t\e[1;32m -> Firmware File: The .zip/.rar/.7z/.tar/.bin/.ozip/.kdz etc. file \e[0m\n"
 	printf "\t\e[1;32m -> OPTIONS: \e[0m\n"
 	printf "\t   -p, --push-only             Push only (Skip extraction)\n"
-	printf "\t   -r, --readme-only           Generate README.md only (Skip extraction)\n"
+	printf "\t   -r, --readme-only [folder]  Generate README.md only from an extracted folder\n"
 	printf "\t   -m, --mode <local|gitlab|github>   Choose output mode (default: local)\n"
 	printf "\t   -g, --gitlab                Shortcut for --mode gitlab\n"
 	printf "\t   -b, --github                Shortcut for --mode github\n"
@@ -183,12 +183,129 @@ prop_override() {
 # Sanitize And Generate Folders
 INPUTDIR="${PROJECT_DIR}"/input		# Firmware Download/Preload Directory
 UTILSDIR="${PROJECT_DIR}"/utils		# Contains Supportive Programs
-OUTDIR=/tmp/out			# Contains Final Extracted Files
-WORK_TMPDIR="${OUTDIR}"/tmp			# Temporary Working Directory
+
+# 7zz is also used outside the extraction-only path (e.g. -r on OPPO dumps).
+if command -v 7zz >/dev/null 2>&1; then
+	BIN_7ZZ=7zz
+elif [[ -x "${UTILSDIR}/bin/7zz" ]]; then
+	BIN_7ZZ="${UTILSDIR}/bin/7zz"
+else
+	BIN_7ZZ=""
+fi
+
+# Run privileged helpers directly as root, or through non-interactive sudo.
+# This prevents password prompts/hangs when --local runs as a normal user.
+run_privileged() {
+	if [[ "${EUID}" -eq 0 ]]; then
+		"$@"
+	else
+		sudo -n "$@"
+	fi
+}
+
+# uvx is a convenience alias for "uv tool run". Provide it when only uv is
+# installed so optional extraction/TWRP steps keep working in minimal setups.
+if ! command -v uvx > /dev/null 2>&1 && [[ -x "${HOME:-}/.local/bin/uvx" ]]; then
+	export PATH="${HOME}/.local/bin:${PATH}"
+fi
+if ! command -v uvx > /dev/null 2>&1; then
+	if command -v uv > /dev/null 2>&1; then
+		uvx() { uv tool run "$@"; }
+	else
+		uvx() { printf "uv/uvx not found, skipping optional Python tool.\n" >&2; return 127; }
+	fi
+fi
+
+# Pick a writable output directory without assuming root, a writable $HOME, or
+# a writable /tmp. Extraction may create the directory; push/readme-only modes
+# only reuse an existing dump, so they never create an empty one by accident.
+dir_has_props() {
+	find "${1}" -maxdepth 4 -type f -name "build*.prop" -print -quit 2>/dev/null | grep -q .
+}
+
+# A directory passed to normal/--local mode may already be an extracted dump.
+# Reuse it instead of rejecting it as "unsupported firmware".
+is_extracted_dump() {
+	find "${1}/system" -maxdepth 2 -type f -name "build*.prop" -print -quit 2>/dev/null | grep -q .
+}
+
+resolve_output_dir() {
+	local create="${1:-false}" candidate
+	for candidate in \
+		"${DUMPRX_OUTDIR:-}" \
+		"/tmp/out" \
+		"${HOME:+${HOME}/tmp/out}" \
+		"${PROJECT_DIR}/tmp/out" \
+		"${PROJECT_DIR}/out"; do
+		[[ -n "${candidate}" ]] || continue
+		if [[ -d "${candidate}" && -w "${candidate}" ]]; then
+			if [[ "${create}" == "true" ]] || dir_has_props "${candidate}"; then
+				printf '%s\n' "${candidate}"
+				return 0
+			fi
+		fi
+		if [[ "${create}" == "true" ]] && mkdir -p "${candidate}" 2>/dev/null && [[ -w "${candidate}" ]]; then
+			printf '%s\n' "${candidate}"
+			return 0
+		fi
+	done
+	return 1
+}
+
+ALREADY_EXTRACTED=false
+if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" && $# -gt 0 && -d "${1}" ]] && is_extracted_dump "${1}"; then
+	ALREADY_EXTRACTED=true
+	OUTDIR="$(cd "${1}" && pwd -P)" || exit 1
+	PUSH_ONLY=true		# reuse the existing-dump path
+	printf "Detected an extracted dump at %s; skipping extraction.\n" "${OUTDIR}"
+fi
+
+# --readme-only can point straight at an extracted dump. This avoids requiring
+# $HOME/tmp/out (often unavailable to non-root users) and lets the mode run in
+# a restricted workspace.
+if [[ "${README_ONLY}" == "true" && $# -gt 0 ]]; then
+	if [[ ! -d "${1}" ]]; then
+		printf "\n  \e[1;31;40m \u2620 Error: Extracted Folder %s Not Found.\e[0m\n\n" "${1}"
+		exit 1
+	fi
+	OUTDIR="$(cd "${1}" && pwd -P)" || exit 1
+elif [[ "${ALREADY_EXTRACTED}" == "true" ]]; then
+	: # OUTDIR points at the supplied extracted dump
+else
+	CREATE_OUTDIR=false
+	[[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]] && CREATE_OUTDIR=true
+	if ! OUTDIR="$(resolve_output_dir "${CREATE_OUTDIR}")"; then
+		printf "\n  \e[1;31;40m \u2620 Error: No Writable Output Directory Found.\e[0m\n"
+		printf "  Create one or set DUMPRX_OUTDIR to a writable path.\n\n"
+		exit 1
+	fi
+	OUTDIR="$(cd "${OUTDIR}" && pwd -P)" || exit 1
+fi
+
+if [[ "${README_ONLY}" == "true" || "${ALREADY_EXTRACTED}" == "true" ]] && [[ ! -w "${OUTDIR}" ]]; then
+	printf "\n  \e[1;31;40m \u2620 Error: %s Is Not Writable.\e[0m\n\n" "${OUTDIR}"
+	exit 1
+fi
+
+if [[ "${README_ONLY}" == "true" ]]; then
+	# Keep scratch data out of the dump being re-read; use a writable temp dir.
+	mkdir -p "${PROJECT_DIR}/tmp" 2>/dev/null
+	WORK_TMPDIR="$(mktemp -d "${PROJECT_DIR}/tmp/dumprx-readme.XXXXXX" 2>/dev/null)" || \
+		WORK_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/dumprx-readme.XXXXXX" 2>/dev/null)" || \
+		WORK_TMPDIR="$(mktemp -d "${OUTDIR}/.dumprx-readme.XXXXXX" 2>/dev/null)" || {
+			printf "\n  \e[1;31;40m \u2620 Error: Cannot Create A Temporary Directory.\e[0m\n\n"
+			exit 1
+		}
+else
+	WORK_TMPDIR="${OUTDIR}/tmp"		# Temporary Working Directory
+fi
 
 if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	rm -rf "${WORK_TMPDIR}" 2>/dev/null
-	mkdir -p "${OUTDIR}" "${WORK_TMPDIR}" 2>/dev/null
+	if ! mkdir -p "${OUTDIR}" "${WORK_TMPDIR}" 2>/dev/null; then
+		printf "\n  \e[1;31;40m \u2620 Error: Cannot Create %s.\e[0m\n\n" "${OUTDIR}"
+		exit 1
+	fi
 
 	EXTERNAL_TOOLS=(
 		bkerler/oppo_ozip_decrypt
@@ -237,16 +354,6 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	RK_EXTRACT="${UTILSDIR}"/bin/rkImageMaker
 	TRANSFER="${UTILSDIR}"/bin/transfer
 	AVBTOOL="${UTILSDIR}"/avbtool.py
-
-	if ! command -v 7zz > /dev/null 2>&1; then
-		BIN_7ZZ="${UTILSDIR}"/bin/7zz
-	else
-		BIN_7ZZ=7zz
-	fi
-
-	if ! command -v uvx > /dev/null 2>&1; then
-		export PATH="${HOME}/.local/bin:${PATH}"
-	fi
 
 	# Set Names of Downloader Utility Programs
 	MEGAMEDIADRIVE_DL="${UTILSDIR}"/downloaders/mega-media-drive_dl.sh
@@ -1021,23 +1128,31 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 			return 0
 		fi
 		echo "Extraction via 7zz failed!"
-		echo "Couldn't extract $p partition via 7zz. Using mount loop"
-		local mount_success=false
-		if sudo mount -o loop -t auto "$p".img "$p" 2>/dev/null; then
-			if mkdir "${p}_" 2>/dev/null; then
-				if sudo cp -a "${p}/." "${p}_/"; then
-					mount_success=true
+		local can_sudo=false
+		if [[ "${EUID}" -eq 0 ]] || { command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; }; then
+			can_sudo=true
+		fi
+		if [[ "${can_sudo}" == "true" ]]; then
+			echo "Couldn't extract $p partition via 7zz. Using mount loop"
+			local mount_success=false
+			if run_privileged mount -o loop -t auto "$p".img "$p" 2>/dev/null; then
+				if mkdir "${p}_" 2>/dev/null; then
+					if run_privileged cp -a "${p}/." "${p}_/"; then
+						mount_success=true
+					fi
+				fi
+				run_privileged umount "${p}" 2>/dev/null || true
+				if [ "$mount_success" = "true" ]; then
+					run_privileged cp -a "${p}_/." "${p}/" 2>/dev/null
+					run_privileged rm -rf "${p}_" 2>/dev/null
+					run_privileged chown -R "$(whoami)" "${p}"/* 2>/dev/null
+					chmod -R u+rwX "${p}"/* 2>/dev/null
+				else
+					run_privileged rm -rf "${p}_" 2>/dev/null
 				fi
 			fi
-			sudo umount "${p}" 2>/dev/null
-			if [ "$mount_success" = "true" ]; then
-				sudo cp -a "${p}_/." "${p}/" 2>/dev/null
-				sudo rm -rf "${p}_" 2>/dev/null
-				sudo chown -R "$(whoami)" "${p}"/* 2>/dev/null
-				chmod -R u+rwX "${p}"/* 2>/dev/null
-			else
-				sudo rm -rf "${p}_" 2>/dev/null
-			fi
+		else
+			printf "No root/passwordless sudo available; skipping loop mount for %s.\n" "$p"
 		fi
 		if [ "$mount_success" = "true" ]; then
 			rm -fv "$p".img > /dev/null 2>&1
@@ -1134,7 +1249,11 @@ else
 	cd "${OUTDIR}"/ || exit
 fi
 
-rm -rf "${OUTDIR}"/.git
+# Do not destroy an existing repository when only regenerating the README or
+# running locally; it is only reset before a fresh GitLab/GitHub push.
+if [[ "${README_ONLY}" == "false" && ( "${MODE}" == "gitlab" || "${MODE}" == "github" ) ]]; then
+	rm -rf "${OUTDIR}"/.git
+fi
 
 # Oppo/Realme Devices Have Some Images In A Euclid Folder In Their Vendor and/or System, Extract Those For Props
 for dir in "vendor/euclid" "system/system/euclid"; do
@@ -1142,8 +1261,11 @@ for dir in "vendor/euclid" "system/system/euclid"; do
 		pushd "${dir}" || exit 1
 		for f in *.img; do
 			[[ -f "${f}" ]] || continue
-			${BIN_7ZZ} x "${f}" -o"${f/.img/}"
-			rm -f "${f}"
+			if [[ -n "${BIN_7ZZ}" ]] && "${BIN_7ZZ}" x "${f}" -o"${f/.img/}" >/dev/null 2>&1; then
+				rm -f "${f}"
+			else
+				printf "Could not extract %s/%s; leaving it in place.\n" "${dir}" "${f}"
+			fi
 		done
 		popd || exit 1
 	fi
@@ -1286,9 +1408,15 @@ otaver=$(prop_get \
 prop_override platform \
 	"ro.vendor.mediatek.platform:vendor" \
 	"ro.board.platform:vendor"
-manufacturer=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} 2>/dev/null | tail -1 || echo "$manufacturer")
-codename=$(grep -hoP "(?<=^ro.product.odm.model=).*" my_manifest/build.prop 2>/dev/null | tail -1 | tr ' ' '-' || true)
-codename=${codename:-$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} 2>/dev/null | tail -1 | tr ' ' '-')}
+odm_brand=$(grep -hoP "(?<=^ro.product.odm.brand=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} 2>/dev/null | tail -1)
+[[ -n "${odm_brand}" ]] && manufacturer="${odm_brand}"
+odm_model=$(grep -hoP "(?<=^ro.product.odm.model=).*" my_manifest/build.prop 2>/dev/null | tail -1 | tr ' ' '-')
+if [[ -n "${odm_model}" ]]; then
+	codename="${odm_model}"
+else
+	odm_device=$(grep -hoP "(?<=^ro.product.odm.device=).*" {odm/etc/*/build.default.prop,vendor/odm/etc/build.prop,odm/etc/build.prop,my_manifest/build.prop} 2>/dev/null | tail -1 | tr ' ' '-')
+	[[ -n "${odm_device}" ]] && codename="${odm_device}"
+fi
 prop_override fingerprint \
 	"ro.build.fingerprint:my_manifest" \
 	"ro.build.fingerprint:tr_manifest" \
@@ -1335,28 +1463,33 @@ if [[ -z "${xosid}" ]] && [[ "${is_transsion}" == "true" ]]; then
 fi
 [[ -n "$xosid" ]] && branch="${xosid// /-}"
 
-for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
-  file="product/overlay/${overlay}/${overlay}.apk"
-  if [ -f "$file" ]; then
-    apktool d "$file"
-    tranchipset="$(grep -oP '(?<=<string name="cpu_rate_cores">).*(?=</string>)' -ar ${overlay}/res/values/strings.xml)"
-    rm -rf "${overlay}"
-    break
-  fi
-done
+if command -v apktool >/dev/null 2>&1; then
+	for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
+	  file="product/overlay/${overlay}/${overlay}.apk"
+	  if [ -f "$file" ]; then
+	    apktool d "$file"
+	    tranchipset="$(grep -oP '(?<=<string name="cpu_rate_cores">).*(?=</string>)' -ar ${overlay}/res/values/strings.xml)"
+	    rm -rf "${overlay}"
+	    break
+	  fi
+	done
+
+	for trfile in tr_product/overlay/com_transsion_overlaysuw/*.apk; do
+	  [ -e "$trfile" ] || continue
+
+	  outdir="decoded_overlay"
+	  apktool d "$trfile" -o "$outdir" -f
+
+	  transname="$(grep -oP '(?<=<item>DEFAULT/)[^<]+' "$outdir/res/values/arrays.xml")"
+
+	  rm -rf "$outdir"
+	  break
+	done
+else
+	printf "apktool not found, skipping APK overlay decoding (optional).\n"
+fi
 [ -z "${tranchipset}" ] && tranchipset=$(cat tr_product/etc/asset/transettings/cpu_info 2>/dev/null)
 
-for trfile in tr_product/overlay/com_transsion_overlaysuw/*.apk; do
-  [ -e "$trfile" ] || continue
-
-  outdir="decoded_overlay"
-  apktool d "$trfile" -o "$outdir" -f
-
-  transname="$(grep -oP '(?<=<item>DEFAULT/)[^<]+' "$outdir/res/values/arrays.xml")"
-
-  rm -rf "$outdir"
-  break
-done
 if [ -z "${transname}" ] && [ -f "odm/etc/goldwatermark/configs/TranssionWM.json" ]; then
     transname="$(grep -oP '(?<=TEXT_BRAND_NAME": ")[^"]*' odm/etc/goldwatermark/configs/TranssionWM.json | head -n1 | xargs)"
 fi
@@ -1390,9 +1523,9 @@ opchipset=$(grep "model_name=\"$CPU_MODEL\"" my_stock/etc/extension/config_proce
 
 repo=$(printf "${manufacturer}" && echo -e "/${codename}")
 
-kernel_version=$(strings boot/kernel | grep -m1 -oP 'Linux version \K[\d.]+-[\w-]+')
-[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-1}
-[ -z "$kernel_version" ] && kernel_version=$(zcat boot/kernel | strings | grep -i Android | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
+kernel_version=$(strings boot/kernel 2>/dev/null | grep -m1 -oP 'Linux version \K[\d.]+-[\w-]+')
+[ -z "$kernel_version" ] && kernel_version=$(strings boot/kernel 2>/dev/null | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1) && kernel_version=${kernel_version::-1}
+[ -z "$kernel_version" ] && kernel_version=$(zcat boot/kernel 2>/dev/null | strings | grep -i Android | grep -oP '\b[0-9]+\.[0-9]+\.[0-9]+-[\w.-]+' | tail -n1)
 
 date=$(prop_get \
 	"ro.build.date:tr_manifest" \
@@ -1640,6 +1773,10 @@ cat "$outfile"
 echo -e "\nrepo: $repo\n"
 
 if [[ "${README_ONLY}" == "true" ]]; then
+	if [[ ! -s "${outfile}" ]]; then
+		printf "\n  \e[1;31;40m \u2620 Error: Failed To Write %s.\e[0m\n\n" "${outfile}"
+		exit 1
+	fi
 	printf "\nREADME.md generated. Skipping Tree generation & Pushing.\n"
 	exit 0
 fi
@@ -1668,11 +1805,14 @@ if [[ -f ${twrpimg} ]]; then
 fi
 
 # Remove all .git directories from twrpdtout
-find "$twrpdtout" -type d -name ".git" -exec rm -rf {} +
+[ -d "$twrpdtout" ] && find "$twrpdtout" -type d -name ".git" -exec rm -rf {} +
 
 # copy file names
-chown "$(whoami)" ./* -R
-chmod -R u+rwX ./*		#ensure final permissions
+# Only root can reliably hand ownership back after a loop-mount extraction.
+if [[ "$(id -u)" -eq 0 ]]; then
+	chown "$(whoami)" ./* -R
+fi
+chmod -R u+rwX ./* 2>/dev/null || true		#ensure final permissions
 find "$OUTDIR" -type f -printf '%P\n' | sort | grep -v ".git/" > "$OUTDIR"/all_files.txt
 
 # Regenerate all_files.txt

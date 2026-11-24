@@ -30,9 +30,12 @@ shellcheck -x setup.sh
 
 # Run locally without GitLab push
 ./dumper.sh --local <firmware-file-or-url>
+./dumper.sh --local <extracted-folder>   # reuse an existing extracted tree
 
 # Generate README only
-./dumper.sh --readme-only --local <extracted-folder-or-firmware>
+./dumper.sh --readme-only --local <extracted-folder>
+./dumper.sh -r /path/to/extracted-dump   # explicit dump folder
+./dumper.sh -r                           # reuse an existing dump directory
 
 # GitLab mode
 ./dumper.sh --gitlab <firmware-file-or-url>
@@ -74,6 +77,8 @@ DumprX/
 
 `dumper.sh` may clone external tools into `utils/` on first run. These directories are generated/runtime dependencies and should generally stay out of commits unless intentionally vendored.
 
+Extraction and `--local` mode run rootless. The legacy loop-mount fallback is only used as root or with passwordless `sudo -n`, so automation never hangs on a sudo password prompt.
+
 Known runtime clones include:
 
 - `bkerler/oppo_ozip_decrypt` — OZIP decryption
@@ -89,7 +94,7 @@ Known runtime clones include:
 
 Options:
   -p, --push-only             Push only; skip extraction
-  -r, --readme-only           Generate README.md only; skip extraction
+  -r, --readme-only [folder]  Generate README.md only; skip extraction
   -m, --mode <local|gitlab|github>   Choose output mode
   -g, --gitlab                Shortcut for --mode gitlab
   -b, --github                Shortcut for --mode github
@@ -113,8 +118,9 @@ Current code initializes `MODE="gitlab"` while the help text may mention local a
 | `PROJECT_DIR` | Directory containing `dumper.sh` |
 | `INPUTDIR` | Firmware download/preload directory, usually `${PROJECT_DIR}/input` |
 | `UTILSDIR` | Helper scripts and binaries |
-| `OUTDIR` | Final extracted output, currently `/tmp/out` |
-| `WORK_TMPDIR` | Temporary work directory under `/tmp/out/tmp` |
+| `OUTDIR` | Final extracted output; resolved to the first writable of `DUMPRX_OUTDIR`, `/tmp/out`, `$HOME/tmp/out`, `${PROJECT_DIR}/tmp/out`, `${PROJECT_DIR}/out`. With `-r <folder>`, the supplied folder is used directly. |
+| `WORK_TMPDIR` | Temporary work directory under `OUTDIR/tmp`, or a private temp dir in readme-only mode |
+| `DUMPRX_OUTDIR` | Optional override for the extraction output directory |
 | `MODE` | `local`, `gitlab`, or `github` output behavior |
 | `REPO_VISIBILITY` | Repo visibility; `private` by default, `public` with `--public` |
 | `PUSH_ONLY` | Skip extraction and push existing output |

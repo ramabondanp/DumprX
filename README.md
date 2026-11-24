@@ -58,6 +58,30 @@ Help Context:
          *.nb0 | .*chunk* | *.pac | *super*.img | *system*.sin
 ```
 
+Generate only `README.md` from an already extracted dump (no root or extraction
+required):
+
+```bash
+./dumper.sh -r /path/to/extracted-dump
+# or reuse the previous output directory
+./dumper.sh -r
+```
+
+The output directory can be overridden with `DUMPRX_OUTDIR`. Otherwise the
+script uses the first writable path among `/tmp/out`, `$HOME/tmp/out`,
+`./tmp/out`, and `./out`.
+
+`--local` also accepts an already extracted dump. If `system/build.prop` is
+present, extraction is skipped and the existing tree is used:
+
+```bash
+./dumper.sh --local /path/to/extracted-dump
+```
+
+Extraction and `--local` mode run in userspace: the legacy loop-mount fallback
+is only attempted as root or when passwordless `sudo -n` is available, so the
+script never stops to ask for a password.
+
 ## How to use it to Upload the Dump to GitLab
 
 To automatically push your firmware dumps to a GitLab repository (default mode) and receive Telegram notifications:
